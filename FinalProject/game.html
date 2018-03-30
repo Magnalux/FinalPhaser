@@ -1,0 +1,291 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <title>Phaser Project 1</title>
+        <link rel="stylesheet" type="text/css" href="css/main.css">
+        <script src="js/phaser.min.js"></script>
+    </head>
+    <body>
+        <!-- <h1 class="center-text">Destroy the Castle</h1> -->
+        <div id="gameArea"></div>
+        
+        <script type="text/javascript">
+
+            window.onload = function() {
+                var GRAVITY = 175;
+                var GRENADE_VELOCITY = 500;
+                var EXPLOSION_VELOCITY = 300;
+                var GRENADE_LIFETIME = 100;
+                var EXPLOSION_LIFETIME = 300;
+                var game = new Phaser.Game(800, 600, Phaser.AUTO, 'gameArea', { preload: preload, create: create, update: update });
+                var platforms;
+                var objectCollisionGroup;
+                var objects;
+                var peopleCollisionGroup;
+                var people;
+                var grenadeCollisionGroup;
+                var grenadeCollided;
+                var projectiles;
+                var shardCollisionGroup;
+                var mouseWasDown = false;
+                var currentLevel;
+                var numDead;
+                var totalPeople;
+
+                function preload () {
+                    game.load.image('background', 'img/Background.png');
+                    game.load.image('blackbox', 'img/Blackbox.png');
+                    game.load.image('ground', 'img/Ground.png');
+                    game.load.image('grenade', 'img/Grenade.png');
+                    game.load.image('explosion', 'img/Shard.png');
+                    game.load.image('person', 'img/Person.png');
+                }
+
+                function create () {
+                    game.stage.backgroundColor = "#555555";
+                    game.physics.startSystem(Phaser.Physics.P2JS);
+                    
+                    game.physics.p2.setImpactEvents(true);
+                    
+                    game.physics.p2.gravity.y = GRAVITY;
+                    
+                    objectCollisionGroup = game.physics.p2.createCollisionGroup();
+                    personCollisionGroup = game.physics.p2.createCollisionGroup();
+                    grenadeCollisionGroup = game.physics.p2.createCollisionGroup();
+                    shardCollisionGroup = game.physics.p2.createCollisionGroup();
+                    game.physics.p2.updateBoundsCollisionGroup();
+                    
+                    var background = game.add.sprite(0, 0, 'background');
+                    background.fixedToCamera = true;
+                    
+                    //NOTE: phaser objects can only be in one group at a time!
+                    people = game.add.group();
+                    people.enableBody = true;
+                    people.physicsBodyType = Phaser.Physics.P2JS;
+                    
+                    projectiles = game.add.group();
+                    projectiles.enableBody = true;
+                    projectiles.physicsBodyType = Phaser.Physics.P2JS;
+
+                    
+                    currentLevel = 0;
+                    loadLevel(currentLevel);
+                }
+                
+                function loadLevel(levelIdx) {
+                    //Delete any levels that might exist
+                    deleteLevel();
+                    numDead = 0;
+                    
+                    objects = game.add.group();
+                    objects.enableBody = true;
+                    objects.physicsBodyType = Phaser.Physics.P2JS;
+                    
+                    spawnObject(game.width / 2, game.height - 10, 'ground', true, false);
+                    
+                    //ground.body.friction = 0.5;
+                    
+                    
+                    if (levelIdx == 0) {
+                        //Load Level 0
+                        //Load the blocks
+                        var currentBlock;
+                        
+                        //Load the people
+                        totalPeople = 2;
+                        
+                        spawnPerson(game.width - 200, game.height - 100, 'person');
+                        spawnPerson(game.width - 60, game.height - 240, 'person');
+                        
+                    }
+                }
+                
+                function deleteLevel() {
+                    if (objects != null) {
+                        objects.destroy();
+                    }
+                    if (grenade != null) {
+                        grenade.destroy();
+                        grenade = null;
+                    }
+                    if (projectiles != null) {
+                        projectiles.destroy();
+                        projectiles = game.add.group();
+                        projectiles.enableBody = true;
+                        projectiles.physicsBodyType = Phaser.Physics.P2JS;
+                    }
+                }
+                
+                //Spawns a physics object
+                function spawnObject(xPos, yPos, texture, stationary, breakable) {
+                    var block = objects.create(xPos, yPos, texture);
+                    block.body.setCollisionGroup(objectCollisionGroup);
+                    if (breakable) {
+                        block.body.collides(grenadeCollisionGroup, blockCollision, this);
+                        block.body.collides(projectiles, blockCollision, this);
+                    }
+                    else {
+                        block.body.collides(grenadeCollisionGroup);
+                        block.body.collides(shardCollisionGroup);
+                    }
+                    block.body.collides(objectCollisionGroup);
+                    block.body.collides(personCollisionGroup);
+                    block.body.kinematic = stationary;
+                }
+                
+                //Spawns a person
+                function spawnPerson(xPos, yPos, textureName) {
+                    var person = people.create(xPos, yPos, textureName);
+                    person.body.setCollisionGroup(personCollisionGroup);
+                    person.body.collides(grenadeCollisionGroup, personCollision, this);
+                    person.body.collides(shardCollisionGroup, personCollision, this);
+                    person.body.collides(objectCollisionGroup);
+                }
+                
+                function update() {
+                    //Check if the next level should be loaded
+                    if (numDead >= totalPeople) {
+                        //Reset the current level since it's the only available level at the moment
+                        //loadLevel(0);
+                    }
+                    
+                    var deltaTime = 1;
+                    
+                    processInput();
+                    updateProjectiles(deltaTime);
+                    updateGrenades();
+                }
+                
+                function processInput() {
+                    //Check if a grenade needs to be spawned
+                    if (game.input.activePointer.leftButton.isDown && !mouseWasDown) {
+                        if (grenade == null) {
+                            spawnGrenade();
+                        }
+                        mouseWasDown = true;
+                    }
+                    else if (!game.input.activePointer.leftButton.isDown) {
+                        mouseWasDown = false;
+                    }
+                }
+                
+                function updateProjectiles(deltaTime) {
+                    projectiles.forEach(function(currentProjectile) {
+                        if (currentProjectile != null) {
+                            currentProjectile.timeRemaining -= deltaTime;
+                            if (currentProjectile.timeRemaining <= 0) {
+                                projectiles.remove(currentProjectile);
+                                currentProjectile.destroy();
+                            }
+                        }
+                    });
+                }
+                
+                function updateGrenades() {
+                    ///*************/////
+                    projectiles.forEach(function(grenade) {
+                        //If the object is a grenade, update it
+                        if ( grenade != null) {
+                            game.camera.follow(grenade);
+
+                            //Update the grenade's angle if it has not already collided
+                            if (!grenadeCollided && grenade.body.velocity.y != 0.0 && grenade.body.velocity.x != 0.0) {
+                                grenade.body.angle = 180.0 * Math.atan((grenade.body.velocity.y) / (grenade.body.velocity.x)) / Math.PI;
+                            }
+
+                            grenade.timeRemaining--;
+                            if (grenade.timeRemaining <= 0.0) {
+                                //Grenade Explodes
+                                explodeGrenade();
+                            }
+                        }
+                    })
+                }
+                
+                function spawnGrenade() {
+                    var grenade = projectiles.create(0, game.height - 50, 'grenade');
+                    
+                    grenade.body.velocity.x = GRENADE_VELOCITY * Math.cos((Math.PI * 80) / 180.0);
+                    grenade.body.velocity.y = GRENADE_VELOCITY * Math.sin((Math.PI * 80) / 180.0);
+                    //grenade.body.acceleration.y = GRAVITY;
+                    //grenade.body.angle = cannon.angle;
+                    grenade.body.collideWorldBounds = false;
+                    grenade.timeRemaining = GRENADE_LIFETIME;
+                    grenade.body.setCollisionGroup(grenadeCollisionGroup);
+                    grenade.body.collides(objectCollisionGroup, grenadeCollision, this);
+                    grenade.body.collides(personCollisionGroup, grenadeCollision, this);
+                    
+                    grenadeCollided = false;
+                    
+                }
+                
+                function explodeGrenade() {
+                    spawnExplosion(grenade.body.x, grenade.body.y);
+                    
+                    grenade.destroy();
+                    grenade = null;
+                    console.log("GRENADE EXPLODED");
+                    
+                }
+                
+                function spawnExplosion(xPos, yPos) {
+                    //A bunch of random projectiles that shoot out and destroy objects
+                    spawnGrenadeShard(xPos, yPos, 0, EXPLOSION_VELOCITY, EXPLOSION_LIFETIME);
+                    spawnGrenadeShard(xPos, yPos, Math.PI / 4, EXPLOSION_VELOCITY, EXPLOSION_LIFETIME);
+                    spawnGrenadeShard(xPos, yPos, Math.PI / 2, EXPLOSION_VELOCITY, EXPLOSION_LIFETIME);
+                    spawnGrenadeShard(xPos, yPos, (3 * Math.PI) / 4, EXPLOSION_VELOCITY, EXPLOSION_LIFETIME);
+                    spawnGrenadeShard(xPos, yPos, Math.PI, EXPLOSION_VELOCITY, EXPLOSION_LIFETIME);
+                    spawnGrenadeShard(xPos, yPos, (5 * Math.PI) / 4, EXPLOSION_VELOCITY, EXPLOSION_LIFETIME);
+                    spawnGrenadeShard(xPos, yPos, (3 * Math.PI) / 2, EXPLOSION_VELOCITY, EXPLOSION_LIFETIME);
+                    spawnGrenadeShard(xPos, yPos, (7 * Math.PI) / 4, EXPLOSION_VELOCITY, EXPLOSION_LIFETIME);
+                    
+                }
+                
+                //Takes in an angle in radians(?)
+                function spawnGrenadeShard(xPos, yPos, angle, velocity, lifetime) {
+                    //Make sure the angle is between 0 and 2PI, but not equal to 2PI
+                    while (angle < 0 || angle > 2 * Math.PI) {
+                        if (angle < 0) {
+                            angle += 2 * Math.PI;
+                        }
+                        else if (angle > 2 * Math.PI) {
+                            angle -= 2 * Math.PI;
+                        }
+                    }
+                    var shard = projectiles.create(xPos, yPos, 'explosion');
+                    shard.body.setCollisionGroup(shardCollisionGroup);
+                    shard.body.collideWorldBounds = false;
+                    shard.body.collides(objectCollisionGroup);
+                    shard.body.collides(personCollisionGroup);
+                    shard.body.velocity.x = velocity * Math.cos(angle);
+                    shard.body.velocity.y = velocity * Math.sin(angle);
+                    shard.timeRemaining = lifetime;
+                }
+                
+                function grenadeCollision() {
+                    grenadeCollided = true;
+                }
+                
+                function blockCollision(body, shapeA, shapeB, equation) {
+                    //Decrement the health of the block
+                    if (body != null) {
+                        body.sprite.health--;
+                        //body.sprite.destroy();
+                    }
+                }
+                
+                function personCollision(body, shapeA, shapeB, equation) {
+                    //Delete the person that collided
+                    if (body != null) {
+                        body.sprite.destroy();
+                        numDead++;
+                        console.log("PERSON KILLED");
+                    }
+                }
+            };
+
+        </script>
+
+    </body>
+</html>
