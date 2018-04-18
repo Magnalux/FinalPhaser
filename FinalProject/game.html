@@ -44,8 +44,8 @@
                 var MAP_WIDTH = 4000;
                 var MAP_HEIGHT = 800;
                 var ICON_WIDTH = 100;
-                var BAR_MAX_LENGTH = 200;
-                var BAR_HEIGHT = 50;
+                var BAR_MAX_LENGTH = 256;
+                var BAR_HEIGHT = 15;
                 var GRAVITY = 400;
                 var GRENADE_VELOCITY = 500;
                 var EXPLOSION_VELOCITY = 300;
@@ -184,6 +184,7 @@
                     actionMenu.icons = game.add.group();
                     actionMenu.moveBar = game.add.sprite(0, actionMenu.yPos, "blackbox");
                     actionMenu.moveBar.height = BAR_HEIGHT;
+                    actionMenu.moveBar.fixedToCamera = true;
                     
                     
                     //Initialize the level
@@ -360,13 +361,14 @@
                         actionMenu.state = 0;
                     }
                     actionMenu.yPos = newYPos;
+                    
                     //Update the y position of every icon in the GUI
                     actionMenu.icons.forEach(function(icon) {
                         if (icon != null) {
-                            icon.y = actionMenu.yPos + icon.iconOffset;
-                            icon.cameraOffset.y = icon.y;
+                            icon.cameraOffset.y = actionMenu.yPos + icon.iconOffset;
                         }
                     });
+                    actionMenu.moveBar.cameraOffset.y = actionMenu.yPos;
                     
                     //Adjust the width of the movement bar based on the current active fighter's movement
                     if (gameState.activeFighter != null) {
