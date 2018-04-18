@@ -11,27 +11,62 @@
         <div id="gameArea"></div>
         
         <script type="text/javascript">
+            /*
+            FOR NEXT ITERATION:
+            Goal: make the camera follow one fighter as they walk around
+            Due:  next wednesday, 4/4
+            Steps:
+            By end of monday:
+            1.  Draw the animation sheet for the paladin-type fighter
+                a.  Moving Right
+                b.  Moving Left
+                c.  Jumping
+                d.  Landing
+                e.  Attacking
+                f.  Shielding
+                g.  Dieing
+                h.  Taking Damage (minor)
+                i.  Taking Damage (moderate)
+                j.  Taking Damage (major, should get flown back)
+                
+                Only two possible directions to face: just flip the image horizontally to face the other direction
+            
+            By end of wednesday:
+            2.  Make the fighter be animated to move right all the time
+            3.  Make the fighter animated only when a directional key is pressed (use 'wasd' controls)
+            4.  Make the fighter move with the animation when a directional key is pressed
+            5.  Make the fighter jump when space is pressed
+            
+            There does not need to be complex terrain (yet). Just make sure there are some platforms to jump on in order to test movement
+            */
 
             window.onload = function() {
-                var GRAVITY = 175;
+                var MAP_WIDTH = 4000;
+                var MAP_HEIGHT = 800;
+                var ICON_WIDTH = 100;
+                var BAR_MAX_LENGTH = 200;
+                var BAR_HEIGHT = 50;
+                var GRAVITY = 400;
                 var GRENADE_VELOCITY = 500;
                 var EXPLOSION_VELOCITY = 300;
-                var GRENADE_LIFETIME = 100;
+                var GRENADE_LIFETIME = 400;
                 var EXPLOSION_LIFETIME = 300;
                 var game = new Phaser.Game(800, 600, Phaser.AUTO, 'gameArea', { preload: preload, create: create, update: update });
-                var platforms;
+                var platformCollisionGroup;
                 var objectCollisionGroup;
                 var objects;
-                var peopleCollisionGroup;
-                var people;
+                var fighterCollisionGroup;
                 var grenadeCollisionGroup;
                 var grenadeCollided;
                 var projectiles;
                 var shardCollisionGroup;
                 var mouseWasDown = false;
                 var currentLevel;
-                var numDead;
-                var totalPeople;
+                var teams;
+                var gameState;
+                var fighterStats;
+                var inputKeys;
+                var actionMenu;
 
                 function preload () {
                     game.load.image('background', 'img/Background.png');
@@ -44,6 +79,8 @@
 
                 function create () {
                     game.stage.backgroundColor = "#555555";
+                    game.world.setBounds(0, 0, MAP_WIDTH, MAP_HEIGHT);
+                    
                     game.physics.startSystem(Phaser.Physics.P2JS);
                     
                     game.physics.p2.setImpactEvents(true);
@@ -51,24 +88,105 @@
                     game.physics.p2.gravity.y = GRAVITY;
                     
                     objectCollisionGroup = game.physics.p2.createCollisionGroup();
-                    personCollisionGroup = game.physics.p2.createCollisionGroup();
+                    platformCollisionGroup = game.physics.p2.createCollisionGroup();
+                    fighterCollisionGroup = game.physics.p2.createCollisionGroup();
                     grenadeCollisionGroup = game.physics.p2.createCollisionGroup();
                     shardCollisionGroup = game.physics.p2.createCollisionGroup();
                     game.physics.p2.updateBoundsCollisionGroup();
                     
+                    
+                    
+                    //Initialize background
                     var background = game.add.sprite(0, 0, 'background');
                     background.fixedToCamera = true;
                     
-                    //NOTE: phaser objects can only be in one group at a time!
-                    people = game.add.group();
-                    people.enableBody = true;
-                    people.physicsBodyType = Phaser.Physics.P2JS;
                     
-                    projectiles = game.add.group();
-                    projectiles.enableBody = true;
-                    projectiles.physicsBodyType = Phaser.Physics.P2JS;
+                    
+                    //NOTE: phaser objects can only be in one group at a time!
+                    //Initialize the two teams
+                    teams = new Object();
+                    
+                    //Initialize the left team
+                    teams.leftTeam = game.add.group();
+                    teams.leftTeam.enableBody = true;
+                    teams.leftTeam.physicsBodyType = Phaser.Physics.P2JS;
+                    teams.leftTeam.numFighters = 0;
+                    teams.leftTeam.nextFighter = 1;
+                    teams.leftTeamArr = new Array();
+                    
+                    //Initialize the right team
+                    teams.rightTeam = game.add.group();
+                    teams.rightTeam.enableBody = true;
+                    teams.rightTeam.physicsBodyType = Phaser.Physics.P2JS;
+                    teams.rightTeam.numFighters = 0;
+                    teams.rightTeam.nextFighter = 1;
+                    teams.rightTeamArr = new Array();
+                    
+                    
+                    
+                    //Initialize keyboard inputs
+                    inputManager = new Object();
+                    
+                    //Initialize the input mode
+                    inputManager.state = "move"
+                    inputManager.movingLeft = false;
+                    
+                    //Initialize specific key inputs
+                    inputManager.key_W = game.input.keyboard.addKey(Phaser.Keyboard.W);
+                    inputManager.key_W.onDown.add(wPressed, this);
+                    inputManager.key_A = game.input.keyboard.addKey(Phaser.Keyboard.A);
+                    inputManager.key_A.onDown.add(aPressed, this);
+                    inputManager.key_D = game.input.keyboard.addKey(Phaser.Keyboard.D);
+                    inputManager.key_D.onDown.add(dPressed, this);
+                    inputManager.key_S = game.input.keyboard.addKey(Phaser.Keyboard.S);
+                    inputManager.key_S.onDown.add(sPressed, this);
+                    inputManager.key_SPACEBAR = game.input.keyboard.addKey(Phaser.Keyboard.SPACEBAR);
+                    inputManager.key_SPACEBAR.onDown.add(spacePressed, this);
+                    
+                    
+                    
+                    //Initialize the lists for each projectile
+                    projectiles = new Object();
+                    projectiles.grenades = game.add.group();
+                    projectiles.grenades.enableBody = true;
+                    projectiles.grenades.physicsBodyType = Phaser.Physics.P2JS;
+                    
+                    projectiles.shards = game.add.group();
+                    projectiles.shards.enableBody = true;
+                    projectiles.shards.physicsBodyType = Phaser.Physics.P2JS;
 
                     
+                    
+                    //Initialize Game State Variable
+                    gameState = new Object();
+                    gameState.activeFighter = null;
+                    gameState.activeTeam = 1;
+                    
+                    
+                    
+                    //Initialize fighter stats
+                    fighterStats = new Object();
+                    fighterStats.paladin = new Object();
+                    fighterStats.paladin.jumpSpeed = 200;
+                    fighterStats.paladin.moveSpeed = 150;
+                    fighterStats.paladin.maxDistance = 150;
+                    
+                    
+                    
+                    //Initialize the Action Menu
+                    actionMenu = new Object();
+                    //State of the Menu: 1 is moving up, -1 is moving down, 0 is stationary
+                    actionMenu.state = 0;
+                    actionMenu.moveRate = 4;
+                    actionMenu.minYPos = game.height - ICON_WIDTH - BAR_HEIGHT;
+                    actionMenu.maxYPos = game.height - BAR_HEIGHT;
+                    actionMenu.yPos = actionMenu.minYPos;
+                    actionMenu.icons = game.add.group();
+                    actionMenu.moveBar = game.add.sprite(0, actionMenu.yPos, "blackbox");
+                    actionMenu.moveBar.height = BAR_HEIGHT;
+                    
+                    
+                    //Initialize the level
                     currentLevel = 0;
                     loadLevel(currentLevel);
                 }
@@ -76,27 +194,25 @@
                 function loadLevel(levelIdx) {
                     //Delete any levels that might exist
                     deleteLevel();
-                    numDead = 0;
                     
                     objects = game.add.group();
                     objects.enableBody = true;
                     objects.physicsBodyType = Phaser.Physics.P2JS;
                     
-                    spawnObject(game.width / 2, game.height - 10, 'ground', true, false);
+                    var ground = spawnObject(MAP_WIDTH / 2, game.height - 10, 'ground', true, false);
                     
-                    //ground.body.friction = 0.5;
+                    ground.body.friction = 1.0;
                     
                     
                     if (levelIdx == 0) {
                         //Load Level 0
-                        //Load the blocks
-                        var currentBlock;
+                        //Load the terrain blocks
                         
-                        //Load the people
-                        totalPeople = 2;
-                        
-                        spawnPerson(game.width - 200, game.height - 100, 'person');
-                        spawnPerson(game.width - 60, game.height - 240, 'person');
+                        //Load the fighters
+                        //Make the first fighter be the one that is active first
+                        var fighter = spawnFighter(MAP_WIDTH/2 - 40, game.height - 120, "paladin", 1);
+                        switchFighter(fighter);
+                        fighter = spawnFighter(MAP_WIDTH/2 + 200, game.height - 120, "paladin", 2);
                         
                     }
                 }
@@ -105,16 +221,19 @@
                     if (objects != null) {
                         objects.destroy();
                     }
-                    if (grenade != null) {
-                        grenade.destroy();
-                        grenade = null;
+                    if (projectiles.grenades != null) {
+                        projectiles.grenades.destroy();
+                        projectiles.grenades = game.add.group();
+                        projectiles.grenades.enableBody = true;
+                        projectiles.grenades.physicsBodyType = Phaser.Physics.P2JS;
                     }
-                    if (projectiles != null) {
-                        projectiles.destroy();
-                        projectiles = game.add.group();
-                        projectiles.enableBody = true;
-                        projectiles.physicsBodyType = Phaser.Physics.P2JS;
+                    if (projectiles.shards != null) {
+                        projectiles.shards.destroy();
+                        projectiles.shards = game.add.group();
+                        projectiles.shards.enableBody = true;
+                        projectiles.shards.physicsBodyType = Phaser.Physics.P2JS;
                     }
+                    
                 }
                 
                 //Spawns a physics object
@@ -130,97 +249,312 @@
                         block.body.collides(shardCollisionGroup);
                     }
                     block.body.collides(objectCollisionGroup);
-                    block.body.collides(personCollisionGroup);
+                    block.body.collides(fighterCollisionGroup);
                     block.body.kinematic = stationary;
+                    
+                    return block;
                 }
                 
-                //Spawns a person
-                function spawnPerson(xPos, yPos, textureName) {
-                    var person = people.create(xPos, yPos, textureName);
-                    person.body.setCollisionGroup(personCollisionGroup);
-                    person.body.collides(grenadeCollisionGroup, personCollision, this);
-                    person.body.collides(shardCollisionGroup, personCollision, this);
-                    person.body.collides(objectCollisionGroup);
+                //Spawns a fighter
+                function spawnFighter(xPos, yPos, type, teamNum) {
+                    
+                    var tileSheet = getFighterSprite(type);
+                    
+                    var fighter;
+                    if (teamNum == 1) {
+                        fighter = teams.leftTeam.create(xPos, yPos, tileSheet);
+                        teams.leftTeamArr.push(fighter);
+                        teams.leftTeam.numFighters++;
+                    } else if (teamNum == 2) {
+                        fighter = teams.rightTeam.create(xPos, yPos, tileSheet);
+                        teams.rightTeamArr.push(fighter);
+                        teams.rightTeam.numFighters++;
+                    }
+                    fighter.team = teamNum;
+                    fighter.fighterType = type;
+                    switch (fighter.fighterType) {
+                        case ("paladin"):
+                            fighter.jumpSpeed = fighterStats.paladin.jumpSpeed;
+                            fighter.moveSpeed = fighterStats.paladin.moveSpeed;
+                            fighter.maxDistance = fighterStats.paladin.maxDistance;
+                            break;
+                    }
+                    fighter.body.setCollisionGroup(fighterCollisionGroup);
+                    fighter.body.collides(fighterCollisionGroup, fighterToFighterCollision, this);
+                    fighter.body.collides(shardCollisionGroup, fighterCollision, this);
+                    fighter.body.collides(objectCollisionGroup);
+                    fighter.body.fixedRotation = true;
+                    fighter.body.kinematic = true;
+                    fighter.body.friction = 1.0;
+                    fighter.startPosition = new Object();
+                    fighter.startPosition.x = fighter.position.x;
+                    fighter.startPosition.y = fighter.position.y;
+                    fighter.distanceFromStart = 0;
+                    fighter.outOfBounds = false;
+                    
+                    return fighter;
+                    
                 }
                 
                 function update() {
-                    //Check if the next level should be loaded
-                    if (numDead >= totalPeople) {
-                        //Reset the current level since it's the only available level at the moment
-                        //loadLevel(0);
-                    }
+                    //Check if the game is over
                     
                     var deltaTime = 1;
                     
-                    processInput();
+                    updateGUI();
                     updateProjectiles(deltaTime);
-                    updateGrenades();
+                    updateFighters();
+                    
+                    processInput();
+                    
+                    game.world.bringToTop(actionMenu.icons);
                 }
                 
                 function processInput() {
+                    inputManager.movingLeft = false;
                     //Check if a grenade needs to be spawned
                     if (game.input.activePointer.leftButton.isDown && !mouseWasDown) {
-                        if (grenade == null) {
-                            spawnGrenade();
-                        }
+                        spawnGrenade();
                         mouseWasDown = true;
                     }
                     else if (!game.input.activePointer.leftButton.isDown) {
                         mouseWasDown = false;
                     }
+                    
+                    //Keyboard input checks
+                    if (inputManager.key_W.isDown) {
+                        wDown();
+                    }
+                    if (inputManager.key_A.isDown) {
+                        aDown();
+                    }
+                    if (inputManager.key_S.isDown) {
+                        sDown();
+                    }
+                    if (inputManager.key_D.isDown) {
+                        dDown();
+                    }
+                    if (inputManager.key_SPACEBAR.isDown) {
+                        spaceDown();
+                    }
                 }
                 
+                function updateGUI() {
+                    //Get the next y position of the GUI
+                    var newYPos = actionMenu.yPos;
+                    if (actionMenu.state == 1) {
+                        console.log("MOVING UP");
+                        newYPos -= actionMenu.moveRate;
+                    } else if (actionMenu.state == -1) {
+                        console.log("MOVING DOWN");
+                        newYPos += actionMenu.moveRate;
+                    }
+                    //Check min/max boundaries
+                    if (newYPos < actionMenu.minYPos) {
+                        console.log("HIT MAX HEIGHT");
+                        newYPos = actionMenu.minYPos;
+                        actionMenu.state = 0;
+                    } else if (newYPos > actionMenu.maxYPos) {
+                        console.log("HIT MIN HEIGHT");
+                        newYPos = actionMenu.maxYPos;
+                        actionMenu.state = 0;
+                    }
+                    actionMenu.yPos = newYPos;
+                    //Update the y position of every icon in the GUI
+                    actionMenu.icons.forEach(function(icon) {
+                        if (icon != null) {
+                            icon.y = actionMenu.yPos + icon.iconOffset;
+                            icon.cameraOffset.y = icon.y;
+                        }
+                    });
+                    
+                    //Adjust the width of the movement bar based on the current active fighter's movement
+                    if (gameState.activeFighter != null) {
+                        var ratio = gameState.activeFighter.distanceFromStart / gameState.activeFighter.maxDistance;
+                        if (ratio > 1) {
+                            ratio = 1;
+                        } else if (ratio < 0) {
+                            ratio = 0;
+                        }
+                    } else {
+                        ratio = 0;
+                    }
+                    actionMenu.moveBar.width = ratio * BAR_MAX_LENGTH;
+                    
+                    }
+                
                 function updateProjectiles(deltaTime) {
-                    projectiles.forEach(function(currentProjectile) {
-                        if (currentProjectile != null) {
-                            currentProjectile.timeRemaining -= deltaTime;
-                            if (currentProjectile.timeRemaining <= 0) {
-                                projectiles.remove(currentProjectile);
-                                currentProjectile.destroy();
+                    //Update grenades
+                    projectiles.grenades.forEach(function(grenade) {
+                        game.camera.follow(grenade);
+
+                        //Update the grenade's angle if it has not already collided
+                        if (!grenadeCollided && grenade.body.velocity.y != 0.0 && grenade.body.velocity.x != 0.0) {
+                            grenade.body.angle = 180.0 * Math.atan((grenade.body.velocity.y) / (grenade.body.velocity.x)) / Math.PI;
+                        }
+
+                        grenade.timeRemaining--;
+                        if (grenade.timeRemaining <= 0.0) {
+                            //Grenade Explodes
+                            explodeGrenade(grenade);
+                            projectiles.grenades.remove(grenade);
+                        }
+                    });
+                    
+                    //Update shards
+                    projectiles.shards.forEach(function(shard) {
+                        if (shard != null) {
+                            shard.timeRemaining -= deltaTime;
+                            if (shard.timeRemaining <= 0) {
+                                projectiles.shards.remove(shard);
+                                shard.destroy();
                             }
                         }
                     });
                 }
                 
-                function updateGrenades() {
-                    ///*************/////
-                    projectiles.forEach(function(grenade) {
-                        //If the object is a grenade, update it
-                        if ( grenade != null) {
-                            game.camera.follow(grenade);
-
-                            //Update the grenade's angle if it has not already collided
-                            if (!grenadeCollided && grenade.body.velocity.y != 0.0 && grenade.body.velocity.x != 0.0) {
-                                grenade.body.angle = 180.0 * Math.atan((grenade.body.velocity.y) / (grenade.body.velocity.x)) / Math.PI;
-                            }
-
-                            grenade.timeRemaining--;
-                            if (grenade.timeRemaining <= 0.0) {
-                                //Grenade Explodes
-                                explodeGrenade();
-                            }
+                function updateFighters() {
+                    teams.leftTeam.forEach(function(fighter) {
+                        //Slowly stopping the fighter
+                        fighter.body.velocity.x *= 0.9;
+                        
+                        //Update the fighter's distance from their starting point and react accordingly
+                        var xDiff = fighter.position.x - fighter.startPosition.x;
+                        var yDiff = fighter.position.y - fighter.startPosition.y;
+                        fighter.distanceFromStart = Math.sqrt((xDiff * xDiff) + (yDiff * yDiff));
+                        if (fighter.distanceFromStart >= fighter.maxDistance) {
+                            fighter.outOfBounds = true;
+                        } else {
+                            fighter.outOfBounds = false;
                         }
-                    })
+                    });
+                    teams.rightTeam.forEach(function(fighter) {
+                        //Slowly stopping the fighter
+                        fighter.body.velocity.x *= 0.9;
+                        
+                        //Update the fighter's distance from their starting point and react accordingly
+                        var xDiff = fighter.position.x - fighter.startPosition.x;
+                        var yDiff = fighter.position.y - fighter.startPosition.y;
+                        fighter.distanceFromStart =  Math.sqrt((xDiff * xDiff) + (yDiff * yDiff));
+                        if (fighter.distanceFromStart >= fighter.maxDistance) {
+                            fighter.outOfBounds = true;
+                        } else {
+                            fighter.outOfBounds = false;
+                        }
+                    });
+                }
+                
+                function getFighterSprite(type) {
+                    var tileSheet;
+                    switch (type) {
+                            case("paladin"):
+                            tileSheet = "blackbox";
+                            break;
+                    }
+                    
+                    return tileSheet;
+                }
+                
+                function copyFighter(fighter) {
+                    var xPos = fighter.position.x;
+                    var yPos = fighter.position.y;
+                    var type = fighter.fighterType;
+                    var teamNum = fighter.team;
+                    var tilesheet = getFighterSprite(type);
+                    
+                    var newFighter;
+                    if (teamNum == 1) {
+                        teams.leftTeam.remove(fighter);
+                        teams.leftTeamArr.splice(teams.leftTeamArr.indexOf(fighter), 1);
+                        newFighter = teams.leftTeam.create(xPos, yPos, tilesheet);
+                        teams.leftTeamArr.push(newFighter);
+                    } else if (teamNum == 2) {
+                        teams.rightTeam.remove(fighter);
+                        teams.rightTeamArr.splice(teams.rightTeamArr.indexOf(fighter), 1);
+                        newFighter = teams.rightTeam.create(xPos, yPos, tilesheet);
+                        teams.rightTeamArr.push(newFighter);
+                    }
+                    fighter.destroy();
+                    
+                    newFighter.team = teamNum;
+                    
+                    //Initialize the fighter's type and its stats
+                    newFighter.fighterType = type;
+                    switch (newFighter.fighterType) {
+                        case ("paladin"):
+                            newFighter.jumpSpeed = fighterStats.paladin.jumpSpeed;
+                            newFighter.moveSpeed = fighterStats.paladin.moveSpeed;
+                            newFighter.maxDistance = fighterStats.paladin.maxDistance;
+                            break;
+                    }
+                    newFighter.body.setCollisionGroup(fighterCollisionGroup);
+                    newFighter.body.collides(fighterCollisionGroup, fighterToFighterCollision, this);
+                    newFighter.body.collides(shardCollisionGroup, fighterCollision, this);
+                    newFighter.body.collides(objectCollisionGroup);
+                    newFighter.body.fixedRotation = true;
+                    newFighter.body.kinematic = false;
+                    newFighter.body.friction = 1.0;
+                    newFighter.startPosition = new Object();
+                    newFighter.startPosition.x = newFighter.position.x;
+                    newFighter.startPosition.y = newFighter.position.y;
+                    newFighter.distanceFromStart = 0;
+                    newFighter.outOfBounds = false;
+                    
+                    return newFighter;
+                    
+                    
+                }
+                
+                function switchFighter(newFighter) {
+                    if (gameState.activeFighter != null) {
+                        if (gameState.activeFighter.team != newFighter.team) {
+                            console.log("SWITCHING TEAMS");
+                            gameState.activeFighter.body.velocity.x = 0;
+                            gameState.activeFighter.body.velocity.y = 0;
+                            gameState.activeFighter.body.kinematic = true;
+                            gameState.activeFighter = null;
+                        } else {
+                            console.log("DID NOT SWITCH TEAMS");
+                            console.log(gameState.activeFighter.team);
+                            console.log(newFighter.team);
+                        }
+                    }
+                    newFighter = copyFighter(newFighter);
+                    
+                    gameState.activeFighter = newFighter;
+                    game.camera.follow(gameState.activeFighter);
+                    resetActionMenu(newFighter.fighterType);
+                }
+                
+                function nextTurn() {
+                    //Changes variables so the next fighter in line can take their turn
+                    gameState.activeTeam = (gameState.activeTeam % 2) + 1;
+                    if (gameState.activeTeam == 1) {
+                        switchFighter(teams.leftTeamArr[0]);
+                    }
+                    else if (gameState.activeTeam == 2) {
+                        switchFighter(teams.rightTeamArr[0]);
+                    }
                 }
                 
                 function spawnGrenade() {
-                    var grenade = projectiles.create(0, game.height - 50, 'grenade');
+                    var grenade = projectiles.grenades.create(0, game.height - 50, 'grenade');
                     
-                    grenade.body.velocity.x = GRENADE_VELOCITY * Math.cos((Math.PI * 80) / 180.0);
-                    grenade.body.velocity.y = GRENADE_VELOCITY * Math.sin((Math.PI * 80) / 180.0);
+                    grenade.body.velocity.x = GRENADE_VELOCITY * Math.cos((Math.PI * 45) / 180.0);
+                    grenade.body.velocity.y = GRENADE_VELOCITY * Math.sin((Math.PI * 45) / 180.0);
                     //grenade.body.acceleration.y = GRAVITY;
                     //grenade.body.angle = cannon.angle;
                     grenade.body.collideWorldBounds = false;
                     grenade.timeRemaining = GRENADE_LIFETIME;
                     grenade.body.setCollisionGroup(grenadeCollisionGroup);
                     grenade.body.collides(objectCollisionGroup, grenadeCollision, this);
-                    grenade.body.collides(personCollisionGroup, grenadeCollision, this);
+                    grenade.body.collides(fighterCollisionGroup, grenadeCollision, this);
                     
                     grenadeCollided = false;
                     
                 }
                 
-                function explodeGrenade() {
+                function explodeGrenade(grenade) {
                     spawnExplosion(grenade.body.x, grenade.body.y);
                     
                     grenade.destroy();
@@ -253,11 +587,11 @@
                             angle -= 2 * Math.PI;
                         }
                     }
-                    var shard = projectiles.create(xPos, yPos, 'explosion');
+                    var shard = projectiles.shards.create(xPos, yPos, 'explosion');
                     shard.body.setCollisionGroup(shardCollisionGroup);
                     shard.body.collideWorldBounds = false;
                     shard.body.collides(objectCollisionGroup);
-                    shard.body.collides(personCollisionGroup);
+                    shard.body.collides(fighterCollisionGroup);
                     shard.body.velocity.x = velocity * Math.cos(angle);
                     shard.body.velocity.y = velocity * Math.sin(angle);
                     shard.timeRemaining = lifetime;
@@ -275,13 +609,342 @@
                     }
                 }
                 
-                function personCollision(body, shapeA, shapeB, equation) {
-                    //Delete the person that collided
+                function fighterToFighterCollision(body, shapeA, shapeB, equation) {
+                    if (body != null) {
+                        console.log("fighter collided");
+                        body.velocity.x = 0;
+                        body.velocity.y = 0;
+                    }
+                }
+                
+                function fighterCollision(body, shapeA, shapeB, equation) {
+                    /*
+                    //Old Method
+                    //Delete the fighter that collided
                     if (body != null) {
                         body.sprite.destroy();
                         numDead++;
                         console.log("PERSON KILLED");
                     }
+                    */
+                }
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                function wDown() {
+                    console.log("W Down");
+                    
+                    switch (inputManager.state) {
+                        case ("move"):
+                            //No Function
+                            break;
+                        case ("action"):
+                            //No Function
+                            break;
+                        case ("aiming"):
+                            aimUp();
+                            break;
+                        case ("observe"):
+                            //No Function
+                            break;
+                    }
+                }
+                
+                function wPressed() {
+                    console.log("W Pressed");
+                    
+                    switch (inputManager.state) {
+                        case ("move"):
+                            //No Function
+                            nextTurn();
+                            break;
+                        case ("action"):
+                            //No Function
+                            break;
+                        case ("aiming"):
+                            //No Function
+                            break;
+                        case ("observe"):
+                            //No Function
+                            break;
+                    }
+                }
+                
+                function aDown() {
+                    console.log("A Down");
+                    
+                    switch (inputManager.state) {
+                        case ("move"):
+                            fighterMoveLeft();
+                            break;
+                        case ("action"):
+                            //No Function
+                            break;
+                        case ("aiming"):
+                            //No Function
+                            break;
+                        case ("observe"):
+                            //No Function
+                            break;
+                    }
+                }
+                
+                function aPressed() {
+                    console.log("A Pressed");
+                    
+                    switch (inputManager.state) {
+                        case ("move"):
+                            //No Function
+                            break;
+                        case ("action"):
+                            menuMoveLeft();
+                            break;
+                        case ("aiming"):
+                            cancelAiming();
+                            break;
+                        case ("observe"):
+                            //No Function
+                            break;
+                    }
+                }
+                
+                function sDown() {
+                    console.log("S Down");
+                    
+                    switch (inputManager.state) {
+                        case ("move"):
+                            //No Function
+                            break;
+                        case ("action"):
+                            //No Function
+                            break;
+                        case ("aiming"):
+                            aimDown();
+                            break;
+                        case ("observe"):
+                            //No Function
+                            break;
+                    }
+                }
+                
+                function sPressed() {
+                    console.log("S Pressed");
+                    
+                    switch (inputManager.state) {
+                        case ("move"):
+                            toggleActionMenu();
+                            break;
+                        case ("action"):
+                            toggleActionMenu();
+                            break;
+                        case ("aiming"):
+                            //No Function
+                            break;
+                        case ("observe"):
+                            //No Function
+                            break;
+                    }
+                }
+                
+                function dDown() {
+                    console.log("D Down");
+                    
+                    switch (inputManager.state) {
+                        case ("move"):
+                            fighterMoveRight();
+                            break;
+                        case ("action"):
+                            //No Function
+                            break;
+                        case ("aiming"):
+                            //No Function
+                            break;
+                        case ("observe"):
+                            //No Function
+                            break;
+                    }
+                }
+                
+                function dPressed() {
+                    console.log("D Pressed");
+                    
+                    switch (inputManager.state) {
+                        case ("move"):
+                            //No Function
+                            break;
+                        case ("action"):
+                            menuMoveRight();
+                            break;
+                        case ("aiming"):
+                            cancelAiming();
+                            break;
+                        case ("observe"):
+                            //No Function
+                            break;
+                    }
+                }
+                
+                function spaceDown() {
+                    console.log("Space Down");
+                    
+                    switch (inputManager.state) {
+                        case ("move"):
+                            //No Function
+                            break;
+                        case ("action"):
+                            //No Function
+                            break;
+                        case ("aiming"):
+                            //No Function
+                            break;
+                        case ("observe"):
+                            //No Function
+                            break;
+                    }
+                }
+                
+                function spacePressed() {
+                    console.log("Space Pressed");
+                    
+                    switch (inputManager.state) {
+                        case ("move"):
+                            fighterJump();
+                            break;
+                        case ("action"):
+                            selectAction();
+                            break;
+                        case ("aiming"):
+                            fireProjectile();
+                            break;
+                        case ("observe"):
+                            toggleCameraFollow();
+                            break;
+                    }
+                }
+                
+                function fighterJump() {
+                    console.log("Fighter jumped");
+                    
+                    if (gameState.activeFighter != null) {
+                        switch (gameState.activeFighter.fighterType) {
+                            case ("paladin"):
+                                gameState.activeFighter.body.velocity.y -= gameState.activeFighter.jumpSpeed;
+                                break;
+                        }
+                    }
+                }
+                
+                function fighterMoveLeft() {
+                    console.log("Fighter moved left");
+                    
+                    if (gameState.activeFighter != null) {
+                        if (!gameState.activeFighter.outOfBounds) {    
+                            gameState.activeFighter.body.velocity.x = -1 * gameState.activeFighter.moveSpeed;
+                            inputManager.movingLeft = true;
+                        } else {
+                            if (gameState.activeFighter.startPosition.x <= gameState.activeFighter.position.x) {
+                                gameState.activeFighter.body.velocity.x = -1 * gameState.activeFighter.moveSpeed;
+                                inputManager.movingLeft = true;
+                            } else {
+                                gameState.activeFighter.body.velocity.x = 0;
+                            }
+                        }
+                    }
+                    
+                }
+                
+                function fighterMoveRight() {
+                    console.log("Fighter moved right");
+                    
+                    if (gameState.activeFighter != null) {
+                        if (!inputManager.movingLeft) {
+                            if (!gameState.activeFighter.outOfBounds) {
+                                gameState.activeFighter.body.velocity.x = gameState.activeFighter.moveSpeed;
+                            } else {
+                                if (gameState.activeFighter.startPosition.x >= gameState.activeFighter.position.x) {
+                                    gameState.activeFighter.body.velocity.x = gameState.activeFighter.moveSpeed;
+                                } else {
+                                    gameState.activeFighter.body.velocity.x = 0;
+                                }
+                            }
+                        } else {
+                            gameState.activeFighter.body.velocity.x = 0;
+                        }
+                    }
+                }
+                
+                function toggleActionMenu() {
+                    console.log("Action menu toggled");
+                    if (actionMenu.state == 0) {
+                        if (actionMenu.yPos == actionMenu.maxYPos) {
+                            console.log("Menu is moving up...");
+                            actionMenu.state = 1;
+                            inputManager.state = "action";
+                        } else if (actionMenu.yPos == actionMenu.minYPos) {
+                            console.log("Menu is moving down...");
+                            actionMenu.state = -1;
+                            inputManager.state = "move";
+                        } else {
+                            //Case for when something weird is happening and you just want to restore the GUI
+                            actionMenu.state = -1;
+                            inputManager.state = "move";
+                        }
+                    }
+                }
+                
+                function resetActionMenu(newFighterType) {
+                    actionMenu.icons.destroy();
+                    actionMenu.icons = game.add.group();
+                    var offset = BAR_HEIGHT;
+                    switch (newFighterType) {
+                        case ("paladin"):
+                            var icon = actionMenu.icons.create(0, actionMenu.yPos + offset, "blackbox");
+                            icon.iconOffset = offset;
+                            icon.width = ICON_WIDTH;
+                            icon.height = ICON_WIDTH;
+                            icon.fixedToCamera = true;
+                            icon.relatedAction = "swordslash";
+                            break;
+                    }
+                }
+                
+                function menuMoveLeft() {
+                    console.log("Menu selection moved left");
+                }
+                
+                function menuMoveRight() {
+                    console.log("Menu selection moved right");
+                }
+                
+                function selectAction() {
+                    console.log("Action selected");
+                }
+                
+                function aimUp() {
+                    console.log("Aimed higher up");
+                }
+                
+                function aimDown() {
+                    console.log("Aimed further down");
+                }
+                
+                function cancelAiming() {
+                    console.log("Stopped aiming");
+                }
+                
+                function fireProjectile() {
+                    console.log("Fired projectile");
+                }
+                
+                function toggleCameraFollow() {
+                    console.log("Toggled camera follow");
                 }
             };
 
