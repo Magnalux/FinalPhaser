@@ -41,6 +41,11 @@
             */
 
             window.onload = function() {
+                var MAP_WIDTH = 4000;
+                var MAP_HEIGHT = 800;
+                var ICON_WIDTH = 100;
+                var BAR_MAX_LENGTH = 200;
+                var BAR_HEIGHT = 50;
                 var GRAVITY = 400;
                 var GRENADE_VELOCITY = 500;
                 var EXPLOSION_VELOCITY = 300;
@@ -61,6 +66,7 @@
                 var gameState;
                 var fighterStats;
                 var inputKeys;
+                var actionMenu;
 
                 function preload () {
                     game.load.image('background', 'img/Background.png');
@@ -73,7 +79,7 @@
 
                 function create () {
                     game.stage.backgroundColor = "#555555";
-                    game.world.setBounds(0, 0, 1920, 800);
+                    game.world.setBounds(0, 0, MAP_WIDTH, MAP_HEIGHT);
                     
                     game.physics.startSystem(Phaser.Physics.P2JS);
                     
@@ -104,22 +110,26 @@
                     teams.leftTeam = game.add.group();
                     teams.leftTeam.enableBody = true;
                     teams.leftTeam.physicsBodyType = Phaser.Physics.P2JS;
+                    teams.leftTeam.numFighters = 0;
+                    teams.leftTeam.nextFighter = 1;
                     teams.leftTeamArr = new Array();
                     
                     //Initialize the right team
                     teams.rightTeam = game.add.group();
                     teams.rightTeam.enableBody = true;
                     teams.rightTeam.physicsBodyType = Phaser.Physics.P2JS;
+                    teams.rightTeam.numFighters = 0;
+                    teams.rightTeam.nextFighter = 1;
                     teams.rightTeamArr = new Array();
                     
                     
                     
                     //Initialize keyboard inputs
-                    //Remember: isdown is not a function, so change that later (make there be another input check in the processinput function)
                     inputManager = new Object();
                     
                     //Initialize the input mode
                     inputManager.state = "move"
+                    inputManager.movingLeft = false;
                     
                     //Initialize specific key inputs
                     inputManager.key_W = game.input.keyboard.addKey(Phaser.Keyboard.W);
@@ -149,8 +159,8 @@
                     
                     //Initialize Game State Variable
                     gameState = new Object();
+                    gameState.activeFighter = null;
                     gameState.activeTeam = 1;
-                    gameState.activeFighter = 1;
                     
                     
                     
@@ -161,6 +171,19 @@
                     fighterStats.paladin.moveSpeed = 150;
                     fighterStats.paladin.maxDistance = 150;
                     
+                    
+                    
+                    //Initialize the Action Menu
+                    actionMenu = new Object();
+                    //State of the Menu: 1 is moving up, -1 is moving down, 0 is stationary
+                    actionMenu.state = 0;
+                    actionMenu.moveRate = 4;
+                    actionMenu.minYPos = game.height - ICON_WIDTH - BAR_HEIGHT;
+                    actionMenu.maxYPos = game.height - BAR_HEIGHT;
+                    actionMenu.yPos = actionMenu.minYPos;
+                    actionMenu.icons = game.add.group();
+                    actionMenu.moveBar = game.add.sprite(0, actionMenu.yPos, "blackbox");
+                    actionMenu.moveBar.height = BAR_HEIGHT;
                     
                     
                     //Initialize the level
@@ -176,7 +199,7 @@
                     objects.enableBody = true;
                     objects.physicsBodyType = Phaser.Physics.P2JS;
                     
-                    var ground = spawnObject(game.width / 2, game.height - 10, 'ground', true, false);
+                    var ground = spawnObject(MAP_WIDTH / 2, game.height - 10, 'ground', true, false);
                     
                     ground.body.friction = 1.0;
                     
@@ -186,7 +209,10 @@
                         //Load the terrain blocks
                         
                         //Load the fighters
-                        var fighter = spawnFighter(40, game.height - 120, "paladin", 1);
+                        //Make the first fighter be the one that is active first
+                        var fighter = spawnFighter(MAP_WIDTH/2 - 40, game.height - 120, "paladin", 1);
+                        switchFighter(fighter);
+                        fighter = spawnFighter(MAP_WIDTH/2 + 200, game.height - 120, "paladin", 2);
                         
                     }
                 }
@@ -232,29 +258,39 @@
                 //Spawns a fighter
                 function spawnFighter(xPos, yPos, type, teamNum) {
                     
-                    var tileSheet;
-                    switch (type) {
-                            case("paladin"):
-                            tileSheet = "blackbox";
-                            break;
-                    }
+                    var tileSheet = getFighterSprite(type);
                     
                     var fighter;
                     if (teamNum == 1) {
                         fighter = teams.leftTeam.create(xPos, yPos, tileSheet);
                         teams.leftTeamArr.push(fighter);
+                        teams.leftTeam.numFighters++;
                     } else if (teamNum == 2) {
                         fighter = teams.rightTeam.create(xPos, yPos, tileSheet);
                         teams.rightTeamArr.push(fighter);
+                        teams.rightTeam.numFighters++;
                     }
+                    fighter.team = teamNum;
                     fighter.fighterType = type;
+                    switch (fighter.fighterType) {
+                        case ("paladin"):
+                            fighter.jumpSpeed = fighterStats.paladin.jumpSpeed;
+                            fighter.moveSpeed = fighterStats.paladin.moveSpeed;
+                            fighter.maxDistance = fighterStats.paladin.maxDistance;
+                            break;
+                    }
                     fighter.body.setCollisionGroup(fighterCollisionGroup);
-                    fighter.body.collides(fighterCollisionGroup, fighterCollision, this);
+                    fighter.body.collides(fighterCollisionGroup, fighterToFighterCollision, this);
                     fighter.body.collides(shardCollisionGroup, fighterCollision, this);
                     fighter.body.collides(objectCollisionGroup);
                     fighter.body.fixedRotation = true;
+                    fighter.body.kinematic = true;
                     fighter.body.friction = 1.0;
-                    game.camera.follow(fighter);
+                    fighter.startPosition = new Object();
+                    fighter.startPosition.x = fighter.position.x;
+                    fighter.startPosition.y = fighter.position.y;
+                    fighter.distanceFromStart = 0;
+                    fighter.outOfBounds = false;
                     
                     return fighter;
                     
@@ -265,13 +301,17 @@
                     
                     var deltaTime = 1;
                     
+                    updateGUI();
                     updateProjectiles(deltaTime);
                     updateFighters();
                     
                     processInput();
+                    
+                    game.world.bringToTop(actionMenu.icons);
                 }
                 
                 function processInput() {
+                    inputManager.movingLeft = false;
                     //Check if a grenade needs to be spawned
                     if (game.input.activePointer.leftButton.isDown && !mouseWasDown) {
                         spawnGrenade();
@@ -299,19 +339,54 @@
                     }
                 }
                 
-                function updateFighters() {
-                    teams.leftTeam.forEach(function(fighter) {
-                        fighter.body.velocity.x *= 0.9;
+                function updateGUI() {
+                    //Get the next y position of the GUI
+                    var newYPos = actionMenu.yPos;
+                    if (actionMenu.state == 1) {
+                        console.log("MOVING UP");
+                        newYPos -= actionMenu.moveRate;
+                    } else if (actionMenu.state == -1) {
+                        console.log("MOVING DOWN");
+                        newYPos += actionMenu.moveRate;
+                    }
+                    //Check min/max boundaries
+                    if (newYPos < actionMenu.minYPos) {
+                        console.log("HIT MAX HEIGHT");
+                        newYPos = actionMenu.minYPos;
+                        actionMenu.state = 0;
+                    } else if (newYPos > actionMenu.maxYPos) {
+                        console.log("HIT MIN HEIGHT");
+                        newYPos = actionMenu.maxYPos;
+                        actionMenu.state = 0;
+                    }
+                    actionMenu.yPos = newYPos;
+                    //Update the y position of every icon in the GUI
+                    actionMenu.icons.forEach(function(icon) {
+                        if (icon != null) {
+                            icon.y = actionMenu.yPos + icon.iconOffset;
+                            icon.cameraOffset.y = icon.y;
+                        }
                     });
-                    teams.rightTeam.forEach(function(fighter) {
-                        fighter.body.velocity.x *= 0.9;
-                    });
-                }
+                    
+                    //Adjust the width of the movement bar based on the current active fighter's movement
+                    if (gameState.activeFighter != null) {
+                        var ratio = gameState.activeFighter.distanceFromStart / gameState.activeFighter.maxDistance;
+                        if (ratio > 1) {
+                            ratio = 1;
+                        } else if (ratio < 0) {
+                            ratio = 0;
+                        }
+                    } else {
+                        ratio = 0;
+                    }
+                    actionMenu.moveBar.width = ratio * BAR_MAX_LENGTH;
+                    
+                    }
                 
                 function updateProjectiles(deltaTime) {
                     //Update grenades
                     projectiles.grenades.forEach(function(grenade) {
-                        //game.camera.follow(grenade);
+                        game.camera.follow(grenade);
 
                         //Update the grenade's angle if it has not already collided
                         if (!grenadeCollided && grenade.body.velocity.y != 0.0 && grenade.body.velocity.x != 0.0) {
@@ -338,8 +413,128 @@
                     });
                 }
                 
+                function updateFighters() {
+                    teams.leftTeam.forEach(function(fighter) {
+                        //Slowly stopping the fighter
+                        fighter.body.velocity.x *= 0.9;
+                        
+                        //Update the fighter's distance from their starting point and react accordingly
+                        var xDiff = fighter.position.x - fighter.startPosition.x;
+                        var yDiff = fighter.position.y - fighter.startPosition.y;
+                        fighter.distanceFromStart = Math.sqrt((xDiff * xDiff) + (yDiff * yDiff));
+                        if (fighter.distanceFromStart >= fighter.maxDistance) {
+                            fighter.outOfBounds = true;
+                        } else {
+                            fighter.outOfBounds = false;
+                        }
+                    });
+                    teams.rightTeam.forEach(function(fighter) {
+                        //Slowly stopping the fighter
+                        fighter.body.velocity.x *= 0.9;
+                        
+                        //Update the fighter's distance from their starting point and react accordingly
+                        var xDiff = fighter.position.x - fighter.startPosition.x;
+                        var yDiff = fighter.position.y - fighter.startPosition.y;
+                        fighter.distanceFromStart =  Math.sqrt((xDiff * xDiff) + (yDiff * yDiff));
+                        if (fighter.distanceFromStart >= fighter.maxDistance) {
+                            fighter.outOfBounds = true;
+                        } else {
+                            fighter.outOfBounds = false;
+                        }
+                    });
+                }
+                
+                function getFighterSprite(type) {
+                    var tileSheet;
+                    switch (type) {
+                            case("paladin"):
+                            tileSheet = "blackbox";
+                            break;
+                    }
+                    
+                    return tileSheet;
+                }
+                
+                function copyFighter(fighter) {
+                    var xPos = fighter.position.x;
+                    var yPos = fighter.position.y;
+                    var type = fighter.fighterType;
+                    var teamNum = fighter.team;
+                    var tilesheet = getFighterSprite(type);
+                    
+                    var newFighter;
+                    if (teamNum == 1) {
+                        teams.leftTeam.remove(fighter);
+                        teams.leftTeamArr.splice(teams.leftTeamArr.indexOf(fighter), 1);
+                        newFighter = teams.leftTeam.create(xPos, yPos, tilesheet);
+                        teams.leftTeamArr.push(newFighter);
+                    } else if (teamNum == 2) {
+                        teams.rightTeam.remove(fighter);
+                        teams.rightTeamArr.splice(teams.rightTeamArr.indexOf(fighter), 1);
+                        newFighter = teams.rightTeam.create(xPos, yPos, tilesheet);
+                        teams.rightTeamArr.push(newFighter);
+                    }
+                    fighter.destroy();
+                    
+                    newFighter.team = teamNum;
+                    
+                    //Initialize the fighter's type and its stats
+                    newFighter.fighterType = type;
+                    switch (newFighter.fighterType) {
+                        case ("paladin"):
+                            newFighter.jumpSpeed = fighterStats.paladin.jumpSpeed;
+                            newFighter.moveSpeed = fighterStats.paladin.moveSpeed;
+                            newFighter.maxDistance = fighterStats.paladin.maxDistance;
+                            break;
+                    }
+                    newFighter.body.setCollisionGroup(fighterCollisionGroup);
+                    newFighter.body.collides(fighterCollisionGroup, fighterToFighterCollision, this);
+                    newFighter.body.collides(shardCollisionGroup, fighterCollision, this);
+                    newFighter.body.collides(objectCollisionGroup);
+                    newFighter.body.fixedRotation = true;
+                    newFighter.body.kinematic = false;
+                    newFighter.body.friction = 1.0;
+                    newFighter.startPosition = new Object();
+                    newFighter.startPosition.x = newFighter.position.x;
+                    newFighter.startPosition.y = newFighter.position.y;
+                    newFighter.distanceFromStart = 0;
+                    newFighter.outOfBounds = false;
+                    
+                    return newFighter;
+                    
+                    
+                }
+                
+                function switchFighter(newFighter) {
+                    if (gameState.activeFighter != null) {
+                        if (gameState.activeFighter.team != newFighter.team) {
+                            console.log("SWITCHING TEAMS");
+                            gameState.activeFighter.body.velocity.x = 0;
+                            gameState.activeFighter.body.velocity.y = 0;
+                            gameState.activeFighter.body.kinematic = true;
+                            gameState.activeFighter = null;
+                        } else {
+                            console.log("DID NOT SWITCH TEAMS");
+                            console.log(gameState.activeFighter.team);
+                            console.log(newFighter.team);
+                        }
+                    }
+                    newFighter = copyFighter(newFighter);
+                    
+                    gameState.activeFighter = newFighter;
+                    game.camera.follow(gameState.activeFighter);
+                    resetActionMenu(newFighter.fighterType);
+                }
+                
                 function nextTurn() {
                     //Changes variables so the next fighter in line can take their turn
+                    gameState.activeTeam = (gameState.activeTeam % 2) + 1;
+                    if (gameState.activeTeam == 1) {
+                        switchFighter(teams.leftTeamArr[0]);
+                    }
+                    else if (gameState.activeTeam == 2) {
+                        switchFighter(teams.rightTeamArr[0]);
+                    }
                 }
                 
                 function spawnGrenade() {
@@ -414,6 +609,14 @@
                     }
                 }
                 
+                function fighterToFighterCollision(body, shapeA, shapeB, equation) {
+                    if (body != null) {
+                        console.log("fighter collided");
+                        body.velocity.x = 0;
+                        body.velocity.y = 0;
+                    }
+                }
+                
                 function fighterCollision(body, shapeA, shapeB, equation) {
                     /*
                     //Old Method
@@ -427,13 +630,20 @@
                 }
                 
                 
+                
+                
+                
+                
+                
+                
+                
+                
                 function wDown() {
                     console.log("W Down");
                     
                     switch (inputManager.state) {
                         case ("move"):
                             //No Function
-                            nextTurn();
                             break;
                         case ("action"):
                             //No Function
@@ -622,21 +832,10 @@
                 function fighterJump() {
                     console.log("Fighter jumped");
                     
-                    var currentFighter = null;
-                    if (gameState.activeTeam == 1) {
-                        if (gameState.activeFighter > 0 && gameState.activeFighter < teams.leftTeamArr.length + 1) {
-                            currentFighter = teams.leftTeamArr[gameState.activeFighter - 1];
-                        }
-                    }
-                    else if (gameState.activeTeam == 2) {
-                        if (gameState.activeFighter > 0 && gameState.activeFighter < teams.rightTeamArr.length + 1) {
-                            currentFighter = teams.leftTeamArr[gameState.activeFighter - 1];
-                        }
-                    }
-                    if (currentFighter != null) {
-                        switch (currentFighter.fighterType) {
+                    if (gameState.activeFighter != null) {
+                        switch (gameState.activeFighter.fighterType) {
                             case ("paladin"):
-                                currentFighter.body.velocity.y -= fighterStats.paladin.jumpSpeed;
+                                gameState.activeFighter.body.velocity.y -= gameState.activeFighter.jumpSpeed;
                                 break;
                         }
                     }
@@ -645,22 +844,17 @@
                 function fighterMoveLeft() {
                     console.log("Fighter moved left");
                     
-                    var currentFighter = null;
-                    if (gameState.activeTeam == 1) {
-                        if (gameState.activeFighter > 0 && gameState.activeFighter < teams.leftTeamArr.length + 1) {
-                            currentFighter = teams.leftTeamArr[gameState.activeFighter - 1];
-                        }
-                    }
-                    else if (gameState.activeTeam == 2) {
-                        if (gameState.activeFighter > 0 && gameState.activeFighter < teams.rightTeamArr.length + 1) {
-                            currentFighter = teams.leftTeamArr[gameState.activeFighter - 1];
-                        }
-                    }
-                    if (currentFighter != null) {
-                        switch (currentFighter.fighterType) {
-                            case ("paladin"):
-                                currentFighter.body.velocity.x = -1 * fighterStats.paladin.moveSpeed;
-                                break;
+                    if (gameState.activeFighter != null) {
+                        if (!gameState.activeFighter.outOfBounds) {    
+                            gameState.activeFighter.body.velocity.x = -1 * gameState.activeFighter.moveSpeed;
+                            inputManager.movingLeft = true;
+                        } else {
+                            if (gameState.activeFighter.startPosition.x <= gameState.activeFighter.position.x) {
+                                gameState.activeFighter.body.velocity.x = -1 * gameState.activeFighter.moveSpeed;
+                                inputManager.movingLeft = true;
+                            } else {
+                                gameState.activeFighter.body.velocity.x = 0;
+                            }
                         }
                     }
                     
@@ -669,28 +863,56 @@
                 function fighterMoveRight() {
                     console.log("Fighter moved right");
                     
-                    var currentFighter = null;
-                    if (gameState.activeTeam == 1) {
-                        if (gameState.activeFighter > 0 && gameState.activeFighter < teams.leftTeamArr.length + 1) {
-                            currentFighter = teams.leftTeamArr[gameState.activeFighter - 1];
-                        }
-                    }
-                    else if (gameState.activeTeam == 2) {
-                        if (gameState.activeFighter > 0 && gameState.activeFighter < teams.rightTeamArr.length + 1) {
-                            currentFighter = teams.leftTeamArr[gameState.activeFighter - 1];
-                        }
-                    }
-                    if (currentFighter != null) {
-                        switch (currentFighter.fighterType) {
-                            case ("paladin"):
-                                currentFighter.body.velocity.x = fighterStats.paladin.moveSpeed;
-                                break;
+                    if (gameState.activeFighter != null) {
+                        if (!inputManager.movingLeft) {
+                            if (!gameState.activeFighter.outOfBounds) {
+                                gameState.activeFighter.body.velocity.x = gameState.activeFighter.moveSpeed;
+                            } else {
+                                if (gameState.activeFighter.startPosition.x >= gameState.activeFighter.position.x) {
+                                    gameState.activeFighter.body.velocity.x = gameState.activeFighter.moveSpeed;
+                                } else {
+                                    gameState.activeFighter.body.velocity.x = 0;
+                                }
+                            }
+                        } else {
+                            gameState.activeFighter.body.velocity.x = 0;
                         }
                     }
                 }
                 
                 function toggleActionMenu() {
                     console.log("Action menu toggled");
+                    if (actionMenu.state == 0) {
+                        if (actionMenu.yPos == actionMenu.maxYPos) {
+                            console.log("Menu is moving up...");
+                            actionMenu.state = 1;
+                            inputManager.state = "action";
+                        } else if (actionMenu.yPos == actionMenu.minYPos) {
+                            console.log("Menu is moving down...");
+                            actionMenu.state = -1;
+                            inputManager.state = "move";
+                        } else {
+                            //Case for when something weird is happening and you just want to restore the GUI
+                            actionMenu.state = -1;
+                            inputManager.state = "move";
+                        }
+                    }
+                }
+                
+                function resetActionMenu(newFighterType) {
+                    actionMenu.icons.destroy();
+                    actionMenu.icons = game.add.group();
+                    var offset = BAR_HEIGHT;
+                    switch (newFighterType) {
+                        case ("paladin"):
+                            var icon = actionMenu.icons.create(0, actionMenu.yPos + offset, "blackbox");
+                            icon.iconOffset = offset;
+                            icon.width = ICON_WIDTH;
+                            icon.height = ICON_WIDTH;
+                            icon.fixedToCamera = true;
+                            icon.relatedAction = "swordslash";
+                            break;
+                    }
                 }
                 
                 function menuMoveLeft() {
