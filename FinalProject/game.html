@@ -467,14 +467,14 @@
                     var newFighter;
                     if (teamNum == 1) {
                         teams.leftTeam.remove(fighter);
-                        teams.leftTeamArr.splice(teams.leftTeamArr.indexOf(fighter), 1);
                         newFighter = teams.leftTeam.create(xPos, yPos, tilesheet);
                         teams.leftTeamArr.push(newFighter);
+                        teams.leftTeamArr.splice(teams.leftTeamArr.indexOf(fighter), 1, newFighter);
                     } else if (teamNum == 2) {
                         teams.rightTeam.remove(fighter);
-                        teams.rightTeamArr.splice(teams.rightTeamArr.indexOf(fighter), 1);
                         newFighter = teams.rightTeam.create(xPos, yPos, tilesheet);
                         teams.rightTeamArr.push(newFighter);
+                        teams.rightTeamArr.splice(teams.rightTeamArr.indexOf(fighter), 1, newFighter);
                     }
                     fighter.destroy();
                     
