@@ -51,6 +51,7 @@
                 var EXPLOSION_VELOCITY = 300;
                 var GRENADE_LIFETIME = 400;
                 var EXPLOSION_LIFETIME = 300;
+                var CAMERA_SPEED = 20;
                 var game = new Phaser.Game(800, 600, Phaser.AUTO, 'gameArea', { preload: preload, create: create, update: update });
                 var platformCollisionGroup;
                 var objectCollisionGroup;
@@ -71,10 +72,12 @@
                 function preload () {
                     game.load.image('background', 'img/Background.png');
                     game.load.image('blackbox', 'img/Blackbox.png');
+                    game.load.image('graybox', 'img/Graybox.png');
                     game.load.image('ground', 'img/Ground.png');
                     game.load.image('grenade', 'img/Grenade.png');
                     game.load.image('explosion', 'img/Shard.png');
                     game.load.image('person', 'img/Person.png');
+                    game.load.image('activeiconoverlay', 'img/ActiveIconOverlay.png');
                 }
 
                 function create () {
@@ -177,11 +180,22 @@
                     actionMenu = new Object();
                     //State of the Menu: 1 is moving up, -1 is moving down, 0 is stationary
                     actionMenu.state = 0;
+                    actionMenu.activeIcon = 0;
+                    actionMenu.numIcons = 0;
                     actionMenu.moveRate = 4;
                     actionMenu.minYPos = game.height - ICON_WIDTH - BAR_HEIGHT;
                     actionMenu.maxYPos = game.height - BAR_HEIGHT;
+                    actionMenu.xPos = 0;
                     actionMenu.yPos = actionMenu.minYPos;
                     actionMenu.icons = game.add.group();
+                    actionMenu.iconArr = new Array();
+                    actionMenu.activeIconOverlay = game.add.sprite(0, actionMenu.yPos + BAR_HEIGHT, 'activeiconoverlay');
+                    actionMenu.activeIconOverlay.fixedToCamera = true;
+                    actionMenu.activeIconOverlay.iconOffset = new Object();
+                    actionMenu.activeIconOverlay.iconOffset.x = 0;
+                    actionMenu.activeIconOverlay.iconOffset.y = BAR_HEIGHT;
+                    actionMenu.activeIconOverlay.width = ICON_WIDTH;
+                    actionMenu.activeIconOverlay.height = ICON_WIDTH;
                     actionMenu.moveBar = game.add.sprite(0, actionMenu.yPos, "blackbox");
                     actionMenu.moveBar.height = BAR_HEIGHT;
                     actionMenu.moveBar.fixedToCamera = true;
@@ -308,14 +322,16 @@
                     
                     processInput();
                     
+                    game.world.bringToTop(actionMenu.moveBar);
                     game.world.bringToTop(actionMenu.icons);
+                    game.world.bringToTop(actionMenu.activeIconOverlay);
                 }
                 
                 function processInput() {
                     inputManager.movingLeft = false;
                     //Check if a grenade needs to be spawned
                     if (game.input.activePointer.leftButton.isDown && !mouseWasDown) {
-                        spawnGrenade();
+                        //spawnGrenade();
                         mouseWasDown = true;
                     }
                     else if (!game.input.activePointer.leftButton.isDown) {
@@ -362,13 +378,19 @@
                     }
                     actionMenu.yPos = newYPos;
                     
-                    //Update the y position of every icon in the GUI
-                    actionMenu.icons.forEach(function(icon) {
-                        if (icon != null) {
-                            icon.cameraOffset.y = actionMenu.yPos + icon.iconOffset;
-                        }
-                    });
-                    actionMenu.moveBar.cameraOffset.y = actionMenu.yPos;
+                    //Update the y position of every icon in the GUI (if there are icons)
+                    if (actionMenu.numIcons != 0) {
+                        actionMenu.icons.forEach(function(icon) {
+                            if (icon != null) {
+                                icon.cameraOffset.x = actionMenu.xPos + icon.iconOffset.x;
+                                icon.cameraOffset.y = actionMenu.yPos + icon.iconOffset.y;
+                            }
+                        });
+                        actionMenu.activeIconOverlay.iconOffset.x = (actionMenu.activeIcon % actionMenu.numIcons) * ICON_WIDTH;
+                        actionMenu.activeIconOverlay.cameraOffset.x = actionMenu.xPos + actionMenu.activeIconOverlay.iconOffset.x;
+                        actionMenu.activeIconOverlay.cameraOffset.y = actionMenu.yPos + actionMenu.activeIconOverlay.iconOffset.y;
+                        actionMenu.moveBar.cameraOffset.y = actionMenu.yPos;
+                    }
                     
                     //Adjust the width of the movement bar based on the current active fighter's movement
                     if (gameState.activeFighter != null) {
@@ -530,6 +552,7 @@
                 
                 function nextTurn() {
                     //Changes variables so the next fighter in line can take their turn
+                    inputManager.state = "move";
                     gameState.activeTeam = (gameState.activeTeam % 2) + 1;
                     if (gameState.activeTeam == 1) {
                         switchFighter(teams.leftTeamArr[0]);
@@ -654,7 +677,7 @@
                             aimUp();
                             break;
                         case ("observe"):
-                            //No Function
+                            cameraMoveUp();
                             break;
                     }
                 }
@@ -665,7 +688,6 @@
                     switch (inputManager.state) {
                         case ("move"):
                             //No Function
-                            nextTurn();
                             break;
                         case ("action"):
                             //No Function
@@ -693,7 +715,7 @@
                             //No Function
                             break;
                         case ("observe"):
-                            //No Function
+                            cameraMoveLeft();
                             break;
                     }
                 }
@@ -731,7 +753,7 @@
                             aimDown();
                             break;
                         case ("observe"):
-                            //No Function
+                            cameraMoveDown();
                             break;
                     }
                 }
@@ -769,7 +791,7 @@
                             //No Function
                             break;
                         case ("observe"):
-                            //No Function
+                            cameraMoveRight();
                             break;
                     }
                 }
@@ -826,7 +848,7 @@
                             fireProjectile();
                             break;
                         case ("observe"):
-                            toggleCameraFollow();
+                            stopObserving();
                             break;
                     }
                 }
@@ -893,6 +915,7 @@
                             console.log("Menu is moving down...");
                             actionMenu.state = -1;
                             inputManager.state = "move";
+                            game.camera.follow(gameState.activeFighter);
                         } else {
                             //Case for when something weird is happening and you just want to restore the GUI
                             actionMenu.state = -1;
@@ -904,29 +927,134 @@
                 function resetActionMenu(newFighterType) {
                     actionMenu.icons.destroy();
                     actionMenu.icons = game.add.group();
-                    var offset = BAR_HEIGHT;
+                    actionMenu.iconArr = new Array();
+                    actionMenu.activeIcon = 0;
+                    actionMenu.yPos = actionMenu.maxYPos;
+                    actionMenu.state = 0;
+                    var xOffset = 0;
+                    var yOffset = BAR_HEIGHT;
+                    var icon = null;
                     switch (newFighterType) {
                         case ("paladin"):
-                            var icon = actionMenu.icons.create(0, actionMenu.yPos + offset, "blackbox");
-                            icon.iconOffset = offset;
+                            actionMenu.numIcons = 4;
+                            icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
+                            actionMenu.iconArr.push(icon);
+                            icon.iconOffset = new Object();
+                            icon.iconOffset.x = xOffset;
+                            icon.iconOffset.y = yOffset;
                             icon.width = ICON_WIDTH;
                             icon.height = ICON_WIDTH;
                             icon.fixedToCamera = true;
-                            icon.relatedAction = "swordslash";
+                            icon.relatedAction = "swordstrike";
+                            
+                            xOffset += ICON_WIDTH;
+                            
+                            icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
+                            actionMenu.iconArr.push(icon);
+                            icon.iconOffset = new Object();
+                            icon.iconOffset.x = xOffset;
+                            icon.iconOffset.y = yOffset;
+                            icon.width = ICON_WIDTH;
+                            icon.height = ICON_WIDTH;
+                            icon.fixedToCamera = true;
+                            icon.relatedAction = "swordstrike";
+                            
+                            xOffset += ICON_WIDTH;
+                            
+                            icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
+                            actionMenu.iconArr.push(icon);
+                            icon.iconOffset = new Object();
+                            icon.iconOffset.x = xOffset;
+                            icon.iconOffset.y = yOffset;
+                            icon.width = ICON_WIDTH;
+                            icon.height = ICON_WIDTH;
+                            icon.fixedToCamera = true;
+                            icon.relatedAction = "swordstrike";
+                            
+                            xOffset += ICON_WIDTH;
                             break;
                     }
+                    actionMenu.numIcons++;
+                    icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
+                    actionMenu.iconArr.push(icon);
+                    icon.iconOffset = new Object();
+                    icon.iconOffset.x = xOffset;
+                    icon.iconOffset.y = yOffset;
+                    icon.width = ICON_WIDTH;
+                    icon.height = ICON_WIDTH;
+                    icon.fixedToCamera = true;
+                    icon.relatedAction = "observemode";
+                    
+                    xOffset += ICON_WIDTH;
+                    
+                    actionMenu.numIcons++;
+                    icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
+                    actionMenu.iconArr.push(icon);
+                    icon.iconOffset = new Object();
+                    icon.iconOffset.x = xOffset;
+                    icon.iconOffset.y = yOffset;
+                    icon.width = ICON_WIDTH;
+                    icon.height = ICON_WIDTH;
+                    icon.fixedToCamera = true;
+                    icon.relatedAction = "endturn";
+                    
+                    xOffset += ICON_WIDTH;
+                    
                 }
                 
                 function menuMoveLeft() {
                     console.log("Menu selection moved left");
+                    actionMenu.activeIcon--;
+                    if (actionMenu.activeIcon < 0) {
+                        actionMenu.activeIcon = actionMenu.numIcons - 1;
+                    }
                 }
                 
                 function menuMoveRight() {
                     console.log("Menu selection moved right");
+                    actionMenu.activeIcon++;
                 }
                 
                 function selectAction() {
                     console.log("Action selected");
+                    
+                    //Get the action the player wants to take
+                    var iconNum = actionMenu.activeIcon % actionMenu.numIcons;
+                    if (iconNum >= 0 && iconNum < actionMenu.numIcons) {
+                        if  (actionMenu.iconArr[iconNum] != null) {
+                            var action = actionMenu.iconArr[iconNum].relatedAction;
+                            
+                            console.log(action);
+                            
+                            //Apply that action
+                            switch (action) {
+                                case ("observemode"):
+                                    toggleActionMenu();
+                                    game.camera.unfollow();
+                                    inputManager.state = "observe";
+                                    break;
+                                case ("swordstrike"):
+                                    swordStrike();
+                                    nextTurn();
+                                    break;
+                                case ("endturn"):
+                                    nextTurn();
+                                    break;
+                                //Make a case for rangedattack later
+                            }
+                        } else {
+                            console.log("ACTION WAS NULL");
+                        }
+                    } else {
+                        console.log("OUT OF ACTION BOUNDS");
+                    }
+                    
+                    
+                    
+                }
+                
+                function swordStrike() {
+                    console.log("SWORDSTRIKE");
                 }
                 
                 function aimUp() {
@@ -945,8 +1073,26 @@
                     console.log("Fired projectile");
                 }
                 
-                function toggleCameraFollow() {
-                    console.log("Toggled camera follow");
+                function cameraMoveUp() {
+                    game.camera.y -= CAMERA_SPEED;
+                }
+                
+                function cameraMoveLeft() {
+                    game.camera.x -= CAMERA_SPEED;
+                }
+                
+                function cameraMoveDown() {
+                    game.camera.y += CAMERA_SPEED;
+                }
+                
+                function cameraMoveRight() {
+                    game.camera.x += CAMERA_SPEED;
+                }
+                
+                function stopObserving() {
+                    console.log("Exiting observation mode");
+                    inputManager.state = "action";
+                    toggleActionMenu();
                 }
             };
 
