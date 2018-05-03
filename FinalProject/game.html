@@ -51,6 +51,7 @@
                 var EXPLOSION_VELOCITY = 300;
                 var GRENADE_LIFETIME = 400;
                 var EXPLOSION_LIFETIME = 300;
+                var CAMERA_SPEED = 20;
                 var game = new Phaser.Game(800, 600, Phaser.AUTO, 'gameArea', { preload: preload, create: create, update: update });
                 var platformCollisionGroup;
                 var objectCollisionGroup;
@@ -67,14 +68,18 @@
                 var fighterStats;
                 var inputKeys;
                 var actionMenu;
+                var selectMenu;
 
                 function preload () {
                     game.load.image('background', 'img/Background.png');
                     game.load.image('blackbox', 'img/Blackbox.png');
+                    game.load.image('graybox', 'img/Graybox.png');
+                    game.load.image('button', 'img/Graybox.png');
                     game.load.image('ground', 'img/Ground.png');
                     game.load.image('grenade', 'img/Grenade.png');
                     game.load.image('explosion', 'img/Shard.png');
                     game.load.image('person', 'img/Person.png');
+                    game.load.image('activeiconoverlay', 'img/ActiveIconOverlay.png');
                 }
 
                 function create () {
@@ -103,24 +108,6 @@
                     
                     
                     //NOTE: phaser objects can only be in one group at a time!
-                    //Initialize the two teams
-                    teams = new Object();
-                    
-                    //Initialize the left team
-                    teams.leftTeam = game.add.group();
-                    teams.leftTeam.enableBody = true;
-                    teams.leftTeam.physicsBodyType = Phaser.Physics.P2JS;
-                    teams.leftTeam.numFighters = 0;
-                    teams.leftTeam.nextFighter = 1;
-                    teams.leftTeamArr = new Array();
-                    
-                    //Initialize the right team
-                    teams.rightTeam = game.add.group();
-                    teams.rightTeam.enableBody = true;
-                    teams.rightTeam.physicsBodyType = Phaser.Physics.P2JS;
-                    teams.rightTeam.numFighters = 0;
-                    teams.rightTeam.nextFighter = 1;
-                    teams.rightTeamArr = new Array();
                     
                     
                     
@@ -159,6 +146,7 @@
                     
                     //Initialize Game State Variable
                     gameState = new Object();
+                    gameState.currentState = "selectmenu";
                     gameState.activeFighter = null;
                     gameState.activeTeam = 1;
                     
@@ -170,24 +158,54 @@
                     fighterStats.paladin.jumpSpeed = 200;
                     fighterStats.paladin.moveSpeed = 150;
                     fighterStats.paladin.maxDistance = 150;
+                    fighterStats.paladin.numJumps = 1;
+                    fighterStats.paladin.attackRange = 100;
+                    fighterStats.paladin.attackDamage = 20;
+                    fighterStats.paladin.maxHealth = 50;
                     
                     
+                    //Initialize the menu
+                    toSelectMenu();
+                }
+                
+                function toSelectMenu() {
+                    deleteLevel();
+                    gameState.currentState = "selectmenu";
+                    inputManager.state = "move";
                     
-                    //Initialize the Action Menu
-                    actionMenu = new Object();
-                    //State of the Menu: 1 is moving up, -1 is moving down, 0 is stationary
-                    actionMenu.state = 0;
-                    actionMenu.moveRate = 4;
-                    actionMenu.minYPos = game.height - ICON_WIDTH - BAR_HEIGHT;
-                    actionMenu.maxYPos = game.height - BAR_HEIGHT;
-                    actionMenu.yPos = actionMenu.minYPos;
-                    actionMenu.icons = game.add.group();
-                    actionMenu.moveBar = game.add.sprite(0, actionMenu.yPos, "blackbox");
-                    actionMenu.moveBar.height = BAR_HEIGHT;
-                    actionMenu.moveBar.fixedToCamera = true;
+                    //Delete any select menu that might exist
+                    deleteSelectMenu();
                     
+                    //Set up the camera's position
+                    game.camera.unfollow();
+                    game.camera.x = 0;
+                    game.camera.y = 0;
                     
-                    //Initialize the level
+                    selectMenu = new Object();
+                    selectMenu.testText = game.add.text(5, 5, "Click the gray square to start", { fill: "#ffffff", font: "14pt Arial" });
+                    selectMenu.testText.fixedToCamera = true;
+                    selectMenu.testText.cameraOffset.x = (game.width - selectMenu.testText.width) / 2;
+                    
+                    selectMenu.testButton = game.add.button(200, 150, "button", actionOnClick, this);
+                    selectMenu.testButton.fixedToCamera = true;
+                }
+                
+                function deleteSelectMenu() {
+                    if (selectMenu != null) {
+                        if (selectMenu.testText != null) {
+                            selectMenu.testText.destroy();
+                        }
+                        if (selectMenu.testButton != null) {
+                            selectMenu.testButton.destroy();
+                        }
+                        console.log(selectMenu);
+                        //selectMenu.destroy();
+                    }
+                }
+                
+                function actionOnClick() {
+                    deleteSelectMenu();
+                    
                     currentLevel = 0;
                     loadLevel(currentLevel);
                 }
@@ -195,6 +213,51 @@
                 function loadLevel(levelIdx) {
                     //Delete any levels that might exist
                     deleteLevel();
+                    
+                    //Update the gamestate
+                    gameState.currentState = "game";
+                    
+                    //Initialize the teams
+                    teams = new Object();
+                    //Initialize the left team
+                    teams.leftTeam = game.add.group();
+                    teams.leftTeam.enableBody = true;
+                    teams.leftTeam.physicsBodyType = Phaser.Physics.P2JS;
+                    teams.leftTeam.numFighters = 0;
+                    teams.leftTeam.nextFighter = 0;
+                    teams.leftTeamArr = new Array();
+                    
+                    //Initialize the right team
+                    teams.rightTeam = game.add.group();
+                    teams.rightTeam.enableBody = true;
+                    teams.rightTeam.physicsBodyType = Phaser.Physics.P2JS;
+                    teams.rightTeam.numFighters = 0;
+                    teams.rightTeam.nextFighter = 0;
+                    teams.rightTeamArr = new Array();
+                    
+                    //Initialize the Action Menu
+                    actionMenu = new Object();
+                    //State of the Menu: 1 is moving up, -1 is moving down, 0 is stationary
+                    actionMenu.state = 0;
+                    actionMenu.activeIcon = 0;
+                    actionMenu.numIcons = 0;
+                    actionMenu.moveRate = 4;
+                    actionMenu.minYPos = game.height - ICON_WIDTH - BAR_HEIGHT;
+                    actionMenu.maxYPos = game.height - BAR_HEIGHT;
+                    actionMenu.xPos = 0;
+                    actionMenu.yPos = actionMenu.minYPos;
+                    actionMenu.icons = game.add.group();
+                    actionMenu.iconArr = new Array();
+                    actionMenu.activeIconOverlay = game.add.sprite(0, actionMenu.yPos + BAR_HEIGHT, 'activeiconoverlay');
+                    actionMenu.activeIconOverlay.fixedToCamera = true;
+                    actionMenu.activeIconOverlay.iconOffset = new Object();
+                    actionMenu.activeIconOverlay.iconOffset.x = 0;
+                    actionMenu.activeIconOverlay.iconOffset.y = BAR_HEIGHT;
+                    actionMenu.activeIconOverlay.width = ICON_WIDTH;
+                    actionMenu.activeIconOverlay.height = ICON_WIDTH;
+                    actionMenu.moveBar = game.add.sprite(0, actionMenu.yPos, "blackbox");
+                    actionMenu.moveBar.height = BAR_HEIGHT;
+                    actionMenu.moveBar.fixedToCamera = true;
                     
                     objects = game.add.group();
                     objects.enableBody = true;
@@ -211,9 +274,14 @@
                         
                         //Load the fighters
                         //Make the first fighter be the one that is active first
-                        var fighter = spawnFighter(MAP_WIDTH/2 - 40, game.height - 120, "paladin", 1);
-                        switchFighter(fighter);
-                        fighter = spawnFighter(MAP_WIDTH/2 + 200, game.height - 120, "paladin", 2);
+                        var firstFighter = spawnFighter(MAP_WIDTH/2 - 40, game.height - 120, "paladin", 1);
+                        var fighter = spawnFighter(MAP_WIDTH/2 + 200, game.height - 120, "paladin", 2);
+                        //fighter = spawnFighter(MAP_WIDTH/2 - 40, game.height - 160, "paladin", 1);
+                        //fighter = spawnFighter(MAP_WIDTH/2 + 200, game.height - 160, "paladin", 2);
+                        //fighter = spawnFighter(MAP_WIDTH/2 - 40, game.height - 200, "paladin", 1);
+                        //fighter = spawnFighter(MAP_WIDTH/2 + 200, game.height - 200, "paladin", 2);
+                        
+                        switchFighter(firstFighter);
                         
                     }
                 }
@@ -221,6 +289,37 @@
                 function deleteLevel() {
                     if (objects != null) {
                         objects.destroy();
+                    }
+                    if (teams != null) {
+                        if (teams.leftTeam != null) {
+                            teams.leftTeam.destroy();
+                        }
+                        if (teams.leftTeamArr != null) {
+                            teams.leftTeamArr = [];
+                        }
+                        if (teams.rightTeam != null) {
+                            teams.rightTeam.destroy();
+                        }
+                        if (teams.rightTeamArr != null) {
+                            teams.rightTeamArr = [];
+                        }
+                        teams = null;
+                    }
+                    if (gameState.activeFighter != null) {
+                        gameState.activeFighter.destroy();
+                        gameState.activeFighter = null;
+                    }
+                    gameState.activeTeam = 1;
+                    if (actionMenu != null) {
+                        if (actionMenu.icons != null) {
+                            actionMenu.icons.destroy();
+                        }
+                        if (actionMenu.activeIconOverlay != null) {
+                            actionMenu.activeIconOverlay.destroy();
+                        }
+                        if (actionMenu.moveBar != null) {
+                            actionMenu.moveBar.destroy();
+                        }
                     }
                     if (projectiles.grenades != null) {
                         projectiles.grenades.destroy();
@@ -278,6 +377,11 @@
                             fighter.jumpSpeed = fighterStats.paladin.jumpSpeed;
                             fighter.moveSpeed = fighterStats.paladin.moveSpeed;
                             fighter.maxDistance = fighterStats.paladin.maxDistance;
+                            fighter.numJumps = fighterStats.paladin.numJumps;
+                            fighter.attackRange = fighterStats.paladin.attackRange;
+                            fighter.attackDamage = fighterStats.paladin.attackDamage;
+                            fighter.maxHealth = fighterStats.paladin.maxHealth;
+                            fighter.health = fighter.maxHealth;
                             break;
                     }
                     fighter.body.setCollisionGroup(fighterCollisionGroup);
@@ -292,6 +396,14 @@
                     fighter.startPosition.y = fighter.position.y;
                     fighter.distanceFromStart = 0;
                     fighter.outOfBounds = false;
+                    fighter.previousYVel = 0;
+                    fighter.animIdx = 0;
+                    fighter.animState = "standing";
+                    if (fighter.team == 1) {
+                        fighter.animDir = "right";
+                    } else if (fighter.team == 2) {
+                        fighter.animDir = "left";
+                    }
                     
                     return fighter;
                     
@@ -300,6 +412,17 @@
                 function update() {
                     //Check if the game is over
                     
+                    switch (gameState.currentState) {
+                        case ("game"):
+                            updateGame();
+                            break;
+                        case ("selectmenu"):
+                            
+                            break;
+                    }
+                }
+                
+                function updateGame() {
                     var deltaTime = 1;
                     
                     updateGUI();
@@ -308,14 +431,20 @@
                     
                     processInput();
                     
+                    game.world.bringToTop(actionMenu.moveBar);
                     game.world.bringToTop(actionMenu.icons);
+                    game.world.bringToTop(actionMenu.activeIconOverlay);
+                }
+                
+                function updateSelectMenu() {
+                    
                 }
                 
                 function processInput() {
                     inputManager.movingLeft = false;
                     //Check if a grenade needs to be spawned
                     if (game.input.activePointer.leftButton.isDown && !mouseWasDown) {
-                        spawnGrenade();
+                        //spawnGrenade();
                         mouseWasDown = true;
                     }
                     else if (!game.input.activePointer.leftButton.isDown) {
@@ -362,13 +491,19 @@
                     }
                     actionMenu.yPos = newYPos;
                     
-                    //Update the y position of every icon in the GUI
-                    actionMenu.icons.forEach(function(icon) {
-                        if (icon != null) {
-                            icon.cameraOffset.y = actionMenu.yPos + icon.iconOffset;
-                        }
-                    });
-                    actionMenu.moveBar.cameraOffset.y = actionMenu.yPos;
+                    //Update the y position of every icon in the GUI (if there are icons)
+                    if (actionMenu.numIcons != 0) {
+                        actionMenu.icons.forEach(function(icon) {
+                            if (icon != null) {
+                                icon.cameraOffset.x = actionMenu.xPos + icon.iconOffset.x;
+                                icon.cameraOffset.y = actionMenu.yPos + icon.iconOffset.y;
+                            }
+                        });
+                        actionMenu.activeIconOverlay.iconOffset.x = (actionMenu.activeIcon % actionMenu.numIcons) * ICON_WIDTH;
+                        actionMenu.activeIconOverlay.cameraOffset.x = actionMenu.xPos + actionMenu.activeIconOverlay.iconOffset.x;
+                        actionMenu.activeIconOverlay.cameraOffset.y = actionMenu.yPos + actionMenu.activeIconOverlay.iconOffset.y;
+                        actionMenu.moveBar.cameraOffset.y = actionMenu.yPos;
+                    }
                     
                     //Adjust the width of the movement bar based on the current active fighter's movement
                     if (gameState.activeFighter != null) {
@@ -444,6 +579,25 @@
                             fighter.outOfBounds = false;
                         }
                     });
+                    
+                    //Reset the fighter's jumps if they are landing
+                    //if (Math.round(gameState.activeFighter.body.velocity.y) == 0 && gameState.activeFighter.previousYVel > 0.0) {
+                    if (Math.round(gameState.activeFighter.body.velocity.y) == Math.round(gameState.activeFighter.previousYVel)) {
+                        loopAnim("standing");
+                        switch (gameState.activeFighter.fighterType) {
+                            case ("paladin"):
+                                gameState.activeFighter.numJumps = fighterStats.paladin.numJumps;
+                                break;
+                        }
+                    } else if (gameState.activeFighter.body.velocity.y > 0.0) {
+                        //Player is falling
+                        //playAnim("falling", "falling");
+                    }
+                    
+                    gameState.activeFighter.previousYVel = gameState.activeFighter.body.velocity.y;
+                    
+                    updateAnim();
+                    
                 }
                 
                 function getFighterSprite(type) {
@@ -460,6 +614,7 @@
                 function copyFighter(fighter) {
                     var xPos = fighter.position.x;
                     var yPos = fighter.position.y;
+                    var health = fighter.health;
                     var type = fighter.fighterType;
                     var teamNum = fighter.team;
                     var tilesheet = getFighterSprite(type);
@@ -487,8 +642,13 @@
                             newFighter.jumpSpeed = fighterStats.paladin.jumpSpeed;
                             newFighter.moveSpeed = fighterStats.paladin.moveSpeed;
                             newFighter.maxDistance = fighterStats.paladin.maxDistance;
+                            newFighter.numJumps = fighterStats.paladin.numJumps;
+                            newFighter.attackRange = fighterStats.paladin.attackRange;
+                            newFighter.attackDamage = fighterStats.paladin.attackDamage;
+                            newFighter.maxHealth = fighterStats.paladin.maxHealth;
                             break;
                     }
+                    newFighter.health = health;
                     newFighter.body.setCollisionGroup(fighterCollisionGroup);
                     newFighter.body.collides(fighterCollisionGroup, fighterToFighterCollision, this);
                     newFighter.body.collides(shardCollisionGroup, fighterCollision, this);
@@ -501,6 +661,7 @@
                     newFighter.startPosition.y = newFighter.position.y;
                     newFighter.distanceFromStart = 0;
                     newFighter.outOfBounds = false;
+                    newFighter.previousYVel = 0;
                     
                     return newFighter;
                     
@@ -521,21 +682,59 @@
                             console.log(newFighter.team);
                         }
                     }
+                    
+                    var oldDir = newFighter.animDir;
                     newFighter = copyFighter(newFighter);
+                    newFighter.animState = "standing";
+                    newFighter.animDir = oldDir;
                     
                     gameState.activeFighter = newFighter;
                     game.camera.follow(gameState.activeFighter);
                     resetActionMenu(newFighter.fighterType);
                 }
                 
+                function killFighter(fighter) {
+                    if (fighter.team == 1) {
+                        teams.leftTeam.remove(fighter);
+                        teams.leftTeamArr.splice(teams.leftTeamArr.indexOf(fighter), 1);
+                        teams.leftTeam.numFighters--;
+                    } else if (fighter.team == 2) {
+                        teams.rightTeam.remove(fighter);
+                        teams.rightTeamArr.splice(teams.rightTeamArr.indexOf(fighter), 1);
+                        teams.rightTeam.numFighters--;
+                    }
+                    if (fighter == gameState.activeFighter) {
+                        gameState.activeFighter = null;
+                    }
+                    fighter.destroy();
+                }
+                
                 function nextTurn() {
                     //Changes variables so the next fighter in line can take their turn
-                    gameState.activeTeam = (gameState.activeTeam % 2) + 1;
-                    if (gameState.activeTeam == 1) {
-                        switchFighter(teams.leftTeamArr[0]);
-                    }
-                    else if (gameState.activeTeam == 2) {
-                        switchFighter(teams.rightTeamArr[0]);
+                    if (teams.leftTeam.numFighters == 0) {
+                        console.log("********LEFT TEAM WINS***************************************************")
+                        teams.rightTeam.nextFighter++;
+                        teams.rightTeam.nextFighter = teams.rightTeam.nextFighter % teams.rightTeam.numFighters;
+                        switchFighter(teams.rightTeamArr[teams.rightTeam.nextFighter]);
+                    } else if (teams.rightTeam.numFighters == 0) {
+                        console.log("**************************************************RIGHT TEAM WINS********")
+                        teams.leftTeam.nextFighter++;
+                        teams.leftTeam.nextFighter = teams.leftTeam.nextFighter % teams.leftTeam.numFighters;
+                        switchFighter(teams.leftTeamArr[teams.leftTeam.nextFighter]);
+                    } else {
+                        console.log("*************************************************************************");
+                        inputManager.state = "move";
+                        gameState.activeTeam = (gameState.activeTeam % 2) + 1;
+                        if (gameState.activeTeam == 1) {
+                            teams.rightTeam.nextFighter++;
+                            teams.rightTeam.nextFighter = teams.rightTeam.nextFighter % teams.rightTeam.numFighters;
+                            switchFighter(teams.leftTeamArr[teams.leftTeam.nextFighter]);
+                        }
+                        else if (gameState.activeTeam == 2) {
+                            teams.leftTeam.nextFighter++;
+                            teams.leftTeam.nextFighter = teams.leftTeam.nextFighter % teams.leftTeam.numFighters;
+                            switchFighter(teams.rightTeamArr[teams.rightTeam.nextFighter]);
+                        }
                     }
                 }
                 
@@ -614,24 +813,65 @@
                 function fighterToFighterCollision(body, shapeA, shapeB, equation) {
                     if (body != null) {
                         console.log("fighter collided");
-                        body.velocity.x = 0;
-                        body.velocity.y = 0;
+                        //body.velocity.x = 0;
+                        //body.velocity.y = 0;
                     }
                 }
                 
                 function fighterCollision(body, shapeA, shapeB, equation) {
-                    /*
-                    //Old Method
-                    //Delete the fighter that collided
-                    if (body != null) {
-                        body.sprite.destroy();
-                        numDead++;
-                        console.log("PERSON KILLED");
-                    }
-                    */
+                    
+                    
                 }
                 
+                function playAnim(newState, frameAfter) {
+                    gameState.activeFighter.animState = newState;
+                    gameState.activeFighter.animIdx = 0;
+                    gameState.activeFighter.animLoop = false;
+                    
+                    //Assign specific animation range here
+                    //REMEMBER TO SET THE FRAMEAFTER ANIM TOO (the frame the player is paused at after this animation completes, staying at this frame until another animation is played)
+                    switch (gameState.activeFighter.animDir) {
+                        case ("right"):
+                            
+                            break;
+                        case ("left"):
+                            
+                            break;
+                    }
+                }
                 
+                function loopAnim(newState) {
+                    gameState.activeFighter.animState = newState;
+                    gameState.activeFighter.animIdx = 0;
+                    gameState.activeFighter.animLoop = true;
+                    
+                    //Assign specific animation range here
+                    switch (gameState.activeFighter.animDir) {
+                        case ("right"):
+                            
+                            break;
+                        case ("left"):
+                            
+                            break;
+                    }
+                }
+                
+                function updateAnim() {
+                    switch (gameState.activeFighter.animState) {
+                        case ("standing"):
+                            
+                            break;
+                        case ("running"):
+                            
+                            break;
+                        case ("jumping"):
+                            
+                            break;
+                        case ("falling"):
+                            
+                            break;
+                    }
+                }
                 
                 
                 
@@ -654,7 +894,7 @@
                             aimUp();
                             break;
                         case ("observe"):
-                            //No Function
+                            cameraMoveUp();
                             break;
                     }
                 }
@@ -665,7 +905,6 @@
                     switch (inputManager.state) {
                         case ("move"):
                             //No Function
-                            nextTurn();
                             break;
                         case ("action"):
                             //No Function
@@ -693,7 +932,7 @@
                             //No Function
                             break;
                         case ("observe"):
-                            //No Function
+                            cameraMoveLeft();
                             break;
                     }
                 }
@@ -731,7 +970,7 @@
                             aimDown();
                             break;
                         case ("observe"):
-                            //No Function
+                            cameraMoveDown();
                             break;
                     }
                 }
@@ -769,7 +1008,7 @@
                             //No Function
                             break;
                         case ("observe"):
-                            //No Function
+                            cameraMoveRight();
                             break;
                     }
                 }
@@ -826,7 +1065,7 @@
                             fireProjectile();
                             break;
                         case ("observe"):
-                            toggleCameraFollow();
+                            stopObserving();
                             break;
                     }
                 }
@@ -835,10 +1074,10 @@
                     console.log("Fighter jumped");
                     
                     if (gameState.activeFighter != null) {
-                        switch (gameState.activeFighter.fighterType) {
-                            case ("paladin"):
-                                gameState.activeFighter.body.velocity.y -= gameState.activeFighter.jumpSpeed;
-                                break;
+                        if (gameState.activeFighter.numJumps > 0) {
+                            gameState.activeFighter.body.velocity.y -= gameState.activeFighter.jumpSpeed;
+                            gameState.activeFighter.numJumps--;
+                            playAnim("jumping", "falling");
                         }
                     }
                 }
@@ -850,10 +1089,18 @@
                         if (!gameState.activeFighter.outOfBounds) {    
                             gameState.activeFighter.body.velocity.x = -1 * gameState.activeFighter.moveSpeed;
                             inputManager.movingLeft = true;
+                            if (gameState.activeFighter.animState != "jumping") {
+                                loopAnim("running");
+                            }
+                            gameState.activeFighter.animDir = "left";
                         } else {
                             if (gameState.activeFighter.startPosition.x <= gameState.activeFighter.position.x) {
                                 gameState.activeFighter.body.velocity.x = -1 * gameState.activeFighter.moveSpeed;
                                 inputManager.movingLeft = true;
+                                if (gameState.activeFighter.animState != "jumping") {
+                                    loopAnim("running");
+                                }
+                                gameState.activeFighter.animDir = "left";
                             } else {
                                 gameState.activeFighter.body.velocity.x = 0;
                             }
@@ -869,9 +1116,17 @@
                         if (!inputManager.movingLeft) {
                             if (!gameState.activeFighter.outOfBounds) {
                                 gameState.activeFighter.body.velocity.x = gameState.activeFighter.moveSpeed;
+                                if (gameState.activeFighter.animState != "jumping") {
+                                    loopAnim("running");
+                                }
+                                gameState.activeFighter.animDir = "right";
                             } else {
                                 if (gameState.activeFighter.startPosition.x >= gameState.activeFighter.position.x) {
                                     gameState.activeFighter.body.velocity.x = gameState.activeFighter.moveSpeed;
+                                    if (gameState.activeFighter.animState != "jumping") {
+                                        loopAnim("running");
+                                    }
+                                    gameState.activeFighter.animDir = "right";
                                 } else {
                                     gameState.activeFighter.body.velocity.x = 0;
                                 }
@@ -893,6 +1148,7 @@
                             console.log("Menu is moving down...");
                             actionMenu.state = -1;
                             inputManager.state = "move";
+                            game.camera.follow(gameState.activeFighter);
                         } else {
                             //Case for when something weird is happening and you just want to restore the GUI
                             actionMenu.state = -1;
@@ -904,29 +1160,209 @@
                 function resetActionMenu(newFighterType) {
                     actionMenu.icons.destroy();
                     actionMenu.icons = game.add.group();
-                    var offset = BAR_HEIGHT;
+                    actionMenu.iconArr = new Array();
+                    actionMenu.activeIcon = 0;
+                    actionMenu.yPos = actionMenu.maxYPos;
+                    actionMenu.state = 0;
+                    var xOffset = 0;
+                    var yOffset = BAR_HEIGHT;
+                    var icon = null;
                     switch (newFighterType) {
                         case ("paladin"):
-                            var icon = actionMenu.icons.create(0, actionMenu.yPos + offset, "blackbox");
-                            icon.iconOffset = offset;
+                            actionMenu.numIcons = 4;
+                            icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
+                            actionMenu.iconArr.push(icon);
+                            icon.iconOffset = new Object();
+                            icon.iconOffset.x = xOffset;
+                            icon.iconOffset.y = yOffset;
                             icon.width = ICON_WIDTH;
                             icon.height = ICON_WIDTH;
                             icon.fixedToCamera = true;
-                            icon.relatedAction = "swordslash";
+                            icon.relatedAction = "swordstrike";
+                            
+                            xOffset += ICON_WIDTH;
+                            
+                            icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
+                            actionMenu.iconArr.push(icon);
+                            icon.iconOffset = new Object();
+                            icon.iconOffset.x = xOffset;
+                            icon.iconOffset.y = yOffset;
+                            icon.width = ICON_WIDTH;
+                            icon.height = ICON_WIDTH;
+                            icon.fixedToCamera = true;
+                            icon.relatedAction = "swordstrike";
+                            
+                            xOffset += ICON_WIDTH;
+                            
+                            icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
+                            actionMenu.iconArr.push(icon);
+                            icon.iconOffset = new Object();
+                            icon.iconOffset.x = xOffset;
+                            icon.iconOffset.y = yOffset;
+                            icon.width = ICON_WIDTH;
+                            icon.height = ICON_WIDTH;
+                            icon.fixedToCamera = true;
+                            icon.relatedAction = "swordstrike";
+                            
+                            xOffset += ICON_WIDTH;
                             break;
                     }
+                    actionMenu.numIcons++;
+                    icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
+                    actionMenu.iconArr.push(icon);
+                    icon.iconOffset = new Object();
+                    icon.iconOffset.x = xOffset;
+                    icon.iconOffset.y = yOffset;
+                    icon.width = ICON_WIDTH;
+                    icon.height = ICON_WIDTH;
+                    icon.fixedToCamera = true;
+                    icon.relatedAction = "observemode";
+                    
+                    xOffset += ICON_WIDTH;
+                    
+                    actionMenu.numIcons++;
+                    icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
+                    actionMenu.iconArr.push(icon);
+                    icon.iconOffset = new Object();
+                    icon.iconOffset.x = xOffset;
+                    icon.iconOffset.y = yOffset;
+                    icon.width = ICON_WIDTH;
+                    icon.height = ICON_WIDTH;
+                    icon.fixedToCamera = true;
+                    icon.relatedAction = "endturn";
+                    
+                    xOffset += ICON_WIDTH;
+                    
+                    actionMenu.numIcons++;
+                    icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
+                    actionMenu.iconArr.push(icon);
+                    icon.iconOffset = new Object();
+                    icon.iconOffset.x = xOffset;
+                    icon.iconOffset.y = yOffset;
+                    icon.width = ICON_WIDTH;
+                    icon.height = ICON_WIDTH;
+                    icon.fixedToCamera = true;
+                    icon.relatedAction = "tomainmenu";
+                    
+                    xOffset += ICON_WIDTH;
+                    
                 }
                 
                 function menuMoveLeft() {
                     console.log("Menu selection moved left");
+                    actionMenu.activeIcon--;
+                    if (actionMenu.activeIcon < 0) {
+                        actionMenu.activeIcon = actionMenu.numIcons - 1;
+                    }
                 }
                 
                 function menuMoveRight() {
                     console.log("Menu selection moved right");
+                    actionMenu.activeIcon++;
                 }
                 
                 function selectAction() {
                     console.log("Action selected");
+                    
+                    if (gameState.activeFighter.animState != "falling" && gameState.activeFighter.animState != "jumping") {
+                        //Get the action the player wants to take
+                        var iconNum = actionMenu.activeIcon % actionMenu.numIcons;
+                        if (iconNum >= 0 && iconNum < actionMenu.numIcons) {
+                            if  (actionMenu.iconArr[iconNum] != null) {
+                                var action = actionMenu.iconArr[iconNum].relatedAction;
+
+                                console.log(action);
+
+                                //Apply that action
+                                switch (action) {
+                                    case ("observemode"):
+                                        toggleActionMenu();
+                                        game.camera.unfollow();
+                                        inputManager.state = "observe";
+                                        break;
+                                    case ("swordstrike"):
+                                        swordStrike();
+                                        nextTurn();
+                                        break;
+                                    case ("endturn"):
+                                        nextTurn();
+                                        break;
+                                    case ("tomainmenu"):
+                                        toSelectMenu();
+                                        break;
+                                    //Make a case for rangedattack later
+                                }
+                            } else {
+                                console.log("ACTION WAS NULL");
+                            }
+                        } else {
+                            console.log("OUT OF ACTION BOUNDS");
+                        }
+                    }
+                    
+                    
+                    
+                }
+                
+                function swordStrike() {
+                    console.log("SWORDSTRIKE");
+                    //Determine the team that is attacking
+                    var attackingTeam = gameState.activeFighter.team;
+                    //Attacking Hitbox Points
+                    var xPos = gameState.activeFighter.x + gameState.activeFighter.width / 2;
+                    var yPos = gameState.activeFighter.y;
+                    var width = 0;
+                    if (gameState.activeFighter.animDir == "left") {
+                        width = -gameState.activeFighter.attackRange;
+                    } else if (gameState.activeFighter.animDir == "right") {
+                        width = gameState.activeFighter.attackRange;
+                    }
+                    var height = gameState.activeFighter.height;
+                    
+                    //Check which fighters get hit
+                    if (attackingTeam == 1) {
+                        //Left team is attacking: loop through right team
+                        teams.rightTeam.forEach(function(fighter) {
+                            var currentXPos = fighter.x + fighter.width / 2;
+                            var currentYPos = fighter.y + fighter.height / 2;
+
+                            if (((currentXPos < xPos + width && currentXPos > xPos) || (currentXPos > xPos + width && currentXPos < xPos))
+                                && ((currentYPos < yPos + height && currentYPos > yPos) || (currentYPos > yPos + height && currentYPos < yPos))) {
+                                //Fighter gets hit
+                                fighterHit(fighter, gameState.activeFighter.attackDamage);
+                            }
+
+                        });
+                    } else if (attackingTeam == 2) {
+                        //Right team is attacking: loop through left team
+                        teams.leftTeam.forEach(function(fighter) {
+                            var currentXPos = fighter.x + fighter.width / 2;
+                            var currentYPos = fighter.y + fighter.height / 2;
+
+                            if (((currentXPos < xPos + width && currentXPos > xPos) || (currentXPos > xPos + width && currentXPos < xPos))
+                                && ((currentYPos < yPos + height && currentYPos > yPos) || (currentYPos > yPos + height && currentYPos < yPos))) {
+                                //Fighter gets hit
+                                fighterHit(fighter, gameState.activeFighter.attackDamage);
+                            }
+                        });
+                    }
+                }
+                
+                function fighterHit(fighter, damage) {
+                    console.log("FIGHTER HIT");
+                    fighter.health -= damage;
+                    if (fighter.health <= 0) {
+                        //Fighter dies
+                        //Play death anim
+                        playAnim(fighter, "death", "knockeddown");
+                        //At end of anim, kill fighter
+                        killFighter(fighter);
+                        console.log("FIGHTER KILLED");
+                    } else {
+                        //Play hit anim
+                        playAnim(fighter, "hit", "standing");
+                    }
+                    console.log(fighter.team);
                 }
                 
                 function aimUp() {
@@ -945,8 +1381,26 @@
                     console.log("Fired projectile");
                 }
                 
-                function toggleCameraFollow() {
-                    console.log("Toggled camera follow");
+                function cameraMoveUp() {
+                    game.camera.y -= CAMERA_SPEED;
+                }
+                
+                function cameraMoveLeft() {
+                    game.camera.x -= CAMERA_SPEED;
+                }
+                
+                function cameraMoveDown() {
+                    game.camera.y += CAMERA_SPEED;
+                }
+                
+                function cameraMoveRight() {
+                    game.camera.x += CAMERA_SPEED;
+                }
+                
+                function stopObserving() {
+                    console.log("Exiting observation mode");
+                    inputManager.state = "action";
+                    toggleActionMenu();
                 }
             };
 
