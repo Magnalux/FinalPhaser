@@ -11,34 +11,6 @@
         <div id="gameArea"></div>
         
         <script type="text/javascript">
-            /*
-            FOR NEXT ITERATION:
-            Goal: make the camera follow one fighter as they walk around
-            Due:  next wednesday, 4/4
-            Steps:
-            By end of monday:
-            1.  Draw the animation sheet for the paladin-type fighter
-                a.  Moving Right
-                b.  Moving Left
-                c.  Jumping
-                d.  Landing
-                e.  Attacking
-                f.  Shielding
-                g.  Dieing
-                h.  Taking Damage (minor)
-                i.  Taking Damage (moderate)
-                j.  Taking Damage (major, should get flown back)
-                
-                Only two possible directions to face: just flip the image horizontally to face the other direction
-            
-            By end of wednesday:
-            2.  Make the fighter be animated to move right all the time
-            3.  Make the fighter animated only when a directional key is pressed (use 'wasd' controls)
-            4.  Make the fighter move with the animation when a directional key is pressed
-            5.  Make the fighter jump when space is pressed
-            
-            There does not need to be complex terrain (yet). Just make sure there are some platforms to jump on in order to test movement
-            */
 
             window.onload = function() {
                 var MAP_WIDTH = 4000;
@@ -46,6 +18,7 @@
                 var ICON_WIDTH = 100;
                 var BAR_MAX_LENGTH = 256;
                 var BAR_HEIGHT = 15;
+                var ANIM_FRAME_RATE = 8;
                 var GRAVITY = 400;
                 var GRENADE_VELOCITY = 500;
                 var EXPLOSION_VELOCITY = 300;
@@ -79,7 +52,9 @@
                     game.load.image('grenade', 'img/Grenade.png');
                     game.load.image('explosion', 'img/Shard.png');
                     game.load.image('person', 'img/Person.png');
+                    game.load.spritesheet('paladin', 'img/Paladin.png', 130, 130);
                     game.load.image('activeiconoverlay', 'img/ActiveIconOverlay.png');
+                    game.load.physics("physics", "json/Hitboxes.json");
                 }
 
                 function create () {
@@ -155,13 +130,15 @@
                     //Initialize fighter stats
                     fighterStats = new Object();
                     fighterStats.paladin = new Object();
+                    fighterStats.paladin.spriteWidth = 130;
                     fighterStats.paladin.jumpSpeed = 200;
-                    fighterStats.paladin.moveSpeed = 150;
+                    fighterStats.paladin.moveSpeed = 170;
                     fighterStats.paladin.maxDistance = 150;
                     fighterStats.paladin.numJumps = 1;
-                    fighterStats.paladin.attackRange = 100;
+                    fighterStats.paladin.attackRange = 50;
                     fighterStats.paladin.attackDamage = 20;
                     fighterStats.paladin.maxHealth = 50;
+                    
                     
                     
                     //Initialize the menu
@@ -365,15 +342,26 @@
                         fighter = teams.leftTeam.create(xPos, yPos, tileSheet);
                         teams.leftTeamArr.push(fighter);
                         teams.leftTeam.numFighters++;
+                        fighter.tint = 0x4444FF;
                     } else if (teamNum == 2) {
                         fighter = teams.rightTeam.create(xPos, yPos, tileSheet);
                         teams.rightTeamArr.push(fighter);
                         teams.rightTeam.numFighters++;
+                        fighter.tint = 0xFF4444;
                     }
                     fighter.team = teamNum;
                     fighter.fighterType = type;
                     switch (fighter.fighterType) {
                         case ("paladin"):
+                            //Initialize paladin animations
+                            fighter.animations.add('standing', [0], ANIM_FRAME_RATE, false);
+                            fighter.animations.add('running', [6, 7, 8, 9], ANIM_FRAME_RATE, false);
+                            fighter.animations.add('jumping', [11], ANIM_FRAME_RATE, false);
+                            fighter.animations.add('falling', [11], ANIM_FRAME_RATE, false);
+                            fighter.animations.add('attacking', [1, 2, 3, 4, 5], ANIM_FRAME_RATE, false);
+                            fighter.animations.add('hit', [10], ANIM_FRAME_RATE, false);
+                            
+                            //Set stats to match those of a paladin
                             fighter.jumpSpeed = fighterStats.paladin.jumpSpeed;
                             fighter.moveSpeed = fighterStats.paladin.moveSpeed;
                             fighter.maxDistance = fighterStats.paladin.maxDistance;
@@ -382,6 +370,10 @@
                             fighter.attackDamage = fighterStats.paladin.attackDamage;
                             fighter.maxHealth = fighterStats.paladin.maxHealth;
                             fighter.health = fighter.maxHealth;
+                            
+                            //Set up paladin hitbox
+                            fighter.body.clearShapes();
+                            fighter.body.loadPolygon("physics", "Paladin");
                             break;
                     }
                     fighter.body.setCollisionGroup(fighterCollisionGroup);
@@ -398,7 +390,8 @@
                     fighter.outOfBounds = false;
                     fighter.previousYVel = 0;
                     fighter.animIdx = 0;
-                    fighter.animState = "standing";
+                    fighter.anchor.setTo(0.5, 0.5);
+                    playAnim(fighter, "standing", true);
                     if (fighter.team == 1) {
                         fighter.animDir = "right";
                     } else if (fighter.team == 2) {
@@ -553,7 +546,7 @@
                 function updateFighters() {
                     teams.leftTeam.forEach(function(fighter) {
                         //Slowly stopping the fighter
-                        fighter.body.velocity.x *= 0.9;
+                        fighter.body.velocity.x *= 0.6;
                         
                         //Update the fighter's distance from their starting point and react accordingly
                         var xDiff = fighter.position.x - fighter.startPosition.x;
@@ -564,10 +557,17 @@
                         } else {
                             fighter.outOfBounds = false;
                         }
+                        updateAnim(fighter);
+                        if (fighter.animDir == "left" && fighter.scale.x > 0) {
+                            fighter.scale.x *= -1;
+                        }
+                        if (fighter.animDir == "right" && fighter.scale.x < 0) {
+                            fighter.scale.x *= -1;
+                        }
                     });
                     teams.rightTeam.forEach(function(fighter) {
                         //Slowly stopping the fighter
-                        fighter.body.velocity.x *= 0.9;
+                        fighter.body.velocity.x *= 0.6;
                         
                         //Update the fighter's distance from their starting point and react accordingly
                         var xDiff = fighter.position.x - fighter.startPosition.x;
@@ -578,12 +578,21 @@
                         } else {
                             fighter.outOfBounds = false;
                         }
+                        updateAnim(fighter);
+                        if (fighter.animDir == "left" && fighter.scale.x > 0) {
+                            fighter.scale.x *= -1;
+                        }
+                        if (fighter.animDir == "right" && fighter.scale.x < 0) {
+                            fighter.scale.x *= -1;
+                        }
                     });
                     
                     //Reset the fighter's jumps if they are landing
                     //if (Math.round(gameState.activeFighter.body.velocity.y) == 0 && gameState.activeFighter.previousYVel > 0.0) {
                     if (Math.round(gameState.activeFighter.body.velocity.y) == Math.round(gameState.activeFighter.previousYVel)) {
-                        loopAnim("standing");
+                        if (gameState.activeFighter.currentAnim != null && gameState.activeFighter.currentAnim.isFinished) {
+                            playAnim(gameState.activeFighter, "standing", true);
+                        }
                         switch (gameState.activeFighter.fighterType) {
                             case ("paladin"):
                                 gameState.activeFighter.numJumps = fighterStats.paladin.numJumps;
@@ -591,12 +600,14 @@
                         }
                     } else if (gameState.activeFighter.body.velocity.y > 0.0) {
                         //Player is falling
-                        //playAnim("falling", "falling");
+                        playAnim(gameState.activeFighter, "falling", true);
                     }
                     
                     gameState.activeFighter.previousYVel = gameState.activeFighter.body.velocity.y;
                     
-                    updateAnim();
+                    if (Math.abs(gameState.activeFighter.body.velocity.x) < 5 && gameState.activeFighter.animState == "running") {
+                        playAnim(gameState.activeFighter, "standing", false);
+                    }
                     
                 }
                 
@@ -604,7 +615,7 @@
                     var tileSheet;
                     switch (type) {
                             case("paladin"):
-                            tileSheet = "blackbox";
+                            tileSheet = "paladin";
                             break;
                     }
                     
@@ -623,11 +634,13 @@
                     if (teamNum == 1) {
                         teams.leftTeam.remove(fighter);
                         newFighter = teams.leftTeam.create(xPos, yPos, tilesheet);
+                        newFighter.tint = 0x4444FF;
                         teams.leftTeamArr.push(newFighter);
                         teams.leftTeamArr.splice(teams.leftTeamArr.indexOf(fighter), 1, newFighter);
                     } else if (teamNum == 2) {
                         teams.rightTeam.remove(fighter);
                         newFighter = teams.rightTeam.create(xPos, yPos, tilesheet);
+                        newFighter.tint = 0xFF4444;
                         teams.rightTeamArr.push(newFighter);
                         teams.rightTeamArr.splice(teams.rightTeamArr.indexOf(fighter), 1, newFighter);
                     }
@@ -639,6 +652,13 @@
                     newFighter.fighterType = type;
                     switch (newFighter.fighterType) {
                         case ("paladin"):
+                            newFighter.animations.add('standing', [0], ANIM_FRAME_RATE, false);
+                            newFighter.animations.add('running', [6, 7, 8, 9], ANIM_FRAME_RATE, false);
+                            newFighter.animations.add('jumping', [11], ANIM_FRAME_RATE, false);
+                            newFighter.animations.add('falling', [11], ANIM_FRAME_RATE, false);
+                            newFighter.animations.add('attacking', [1, 2, 3, 4, 5], ANIM_FRAME_RATE, false);
+                            newFighter.animations.add('hit', [10], ANIM_FRAME_RATE, false);
+                            
                             newFighter.jumpSpeed = fighterStats.paladin.jumpSpeed;
                             newFighter.moveSpeed = fighterStats.paladin.moveSpeed;
                             newFighter.maxDistance = fighterStats.paladin.maxDistance;
@@ -646,6 +666,9 @@
                             newFighter.attackRange = fighterStats.paladin.attackRange;
                             newFighter.attackDamage = fighterStats.paladin.attackDamage;
                             newFighter.maxHealth = fighterStats.paladin.maxHealth;
+                            
+                            newFighter.body.clearShapes();
+                            newFighter.body.loadPolygon("physics", "Paladin");
                             break;
                     }
                     newFighter.health = health;
@@ -662,6 +685,7 @@
                     newFighter.distanceFromStart = 0;
                     newFighter.outOfBounds = false;
                     newFighter.previousYVel = 0;
+                    newFighter.anchor.setTo(0.5, 0.5);
                     
                     return newFighter;
                     
@@ -680,15 +704,20 @@
                             console.log("DID NOT SWITCH TEAMS");
                             console.log(gameState.activeFighter.team);
                             console.log(newFighter.team);
+                            
+                            gameState.activeFighter.body.velocity.x = 0;
+                            gameState.activeFighter.body.velocity.y = 0;
+                            gameState.activeFighter.body.kinematic = true;
+                            gameState.activeFighter = null;
                         }
                     }
                     
                     var oldDir = newFighter.animDir;
                     newFighter = copyFighter(newFighter);
-                    newFighter.animState = "standing";
-                    newFighter.animDir = oldDir;
                     
                     gameState.activeFighter = newFighter;
+                    playAnim(gameState.activeFighter, "standing", true);
+                    newFighter.animDir = oldDir;
                     game.camera.follow(gameState.activeFighter);
                     resetActionMenu(newFighter.fighterType);
                 }
@@ -823,53 +852,27 @@
                     
                 }
                 
-                function playAnim(newState, frameAfter) {
-                    gameState.activeFighter.animState = newState;
-                    gameState.activeFighter.animIdx = 0;
-                    gameState.activeFighter.animLoop = false;
+                function playAnim(fighter, newState, loop, endAnim) {
+                    fighter.animState = newState;
+                    fighter.animLoop = loop;
+                    if (endAnim == null) {
+                        endAnim = "standing";
+                    }
+                    fighter.endAnimState = endAnim;
                     
                     //Assign specific animation range here
                     //REMEMBER TO SET THE FRAMEAFTER ANIM TOO (the frame the player is paused at after this animation completes, staying at this frame until another animation is played)
-                    switch (gameState.activeFighter.animDir) {
-                        case ("right"):
-                            
-                            break;
-                        case ("left"):
-                            
-                            break;
-                    }
-                }
-                
-                function loopAnim(newState) {
-                    gameState.activeFighter.animState = newState;
-                    gameState.activeFighter.animIdx = 0;
-                    gameState.activeFighter.animLoop = true;
+                    fighter.currentAnim = fighter.animations.play(fighter.animState);
                     
-                    //Assign specific animation range here
-                    switch (gameState.activeFighter.animDir) {
-                        case ("right"):
-                            
-                            break;
-                        case ("left"):
-                            
-                            break;
-                    }
+                    //fighter.animations.stop();
+                    //fighter.frame = 1;
                 }
                 
-                function updateAnim() {
-                    switch (gameState.activeFighter.animState) {
-                        case ("standing"):
-                            
-                            break;
-                        case ("running"):
-                            
-                            break;
-                        case ("jumping"):
-                            
-                            break;
-                        case ("falling"):
-                            
-                            break;
+                function updateAnim(fighter) {
+                    if (fighter.currentAnim != null) {
+                        if (fighter.currentAnim.isFinished && !fighter.animLoop) {
+                            playAnim(fighter, fighter.endAnimState, true);
+                        }
                     }
                 }
                 
@@ -1077,7 +1080,7 @@
                         if (gameState.activeFighter.numJumps > 0) {
                             gameState.activeFighter.body.velocity.y -= gameState.activeFighter.jumpSpeed;
                             gameState.activeFighter.numJumps--;
-                            playAnim("jumping", "falling");
+                            playAnim(gameState.activeFighter, "jumping", false, "falling");
                         }
                     }
                 }
@@ -1089,20 +1092,21 @@
                         if (!gameState.activeFighter.outOfBounds) {    
                             gameState.activeFighter.body.velocity.x = -1 * gameState.activeFighter.moveSpeed;
                             inputManager.movingLeft = true;
-                            if (gameState.activeFighter.animState != "jumping") {
-                                loopAnim("running");
+                            if (gameState.activeFighter.animState == "standing") {
+                                playAnim(gameState.activeFighter, "running", true);
                             }
                             gameState.activeFighter.animDir = "left";
                         } else {
                             if (gameState.activeFighter.startPosition.x <= gameState.activeFighter.position.x) {
                                 gameState.activeFighter.body.velocity.x = -1 * gameState.activeFighter.moveSpeed;
                                 inputManager.movingLeft = true;
-                                if (gameState.activeFighter.animState != "jumping") {
-                                    loopAnim("running");
+                                if (gameState.activeFighter.animState == "standing") {
+                                    playAnim(gameState.activeFighter, "running", true);
                                 }
                                 gameState.activeFighter.animDir = "left";
                             } else {
                                 gameState.activeFighter.body.velocity.x = 0;
+                                playAnim(gameState.activeFighter, "standing", false);
                             }
                         }
                     }
@@ -1116,23 +1120,25 @@
                         if (!inputManager.movingLeft) {
                             if (!gameState.activeFighter.outOfBounds) {
                                 gameState.activeFighter.body.velocity.x = gameState.activeFighter.moveSpeed;
-                                if (gameState.activeFighter.animState != "jumping") {
-                                    loopAnim("running");
+                                if (gameState.activeFighter.animState == "standing") {
+                                    playAnim(gameState.activeFighter, "running", true);
                                 }
                                 gameState.activeFighter.animDir = "right";
                             } else {
                                 if (gameState.activeFighter.startPosition.x >= gameState.activeFighter.position.x) {
                                     gameState.activeFighter.body.velocity.x = gameState.activeFighter.moveSpeed;
-                                    if (gameState.activeFighter.animState != "jumping") {
-                                        loopAnim("running");
+                                    if (gameState.activeFighter.animState == "standing") {
+                                        playAnim(gameState.activeFighter, "running", true);
                                     }
                                     gameState.activeFighter.animDir = "right";
                                 } else {
                                     gameState.activeFighter.body.velocity.x = 0;
+                                    playAnim(gameState.activeFighter, "standing", false);
                                 }
                             }
                         } else {
                             gameState.activeFighter.body.velocity.x = 0;
+                            playAnim(gameState.activeFighter, "standing", false);
                         }
                     }
                 }
@@ -1309,13 +1315,15 @@
                     //Determine the team that is attacking
                     var attackingTeam = gameState.activeFighter.team;
                     //Attacking Hitbox Points
-                    var xPos = gameState.activeFighter.x + gameState.activeFighter.width / 2;
-                    var yPos = gameState.activeFighter.y;
+                    var xPos = gameState.activeFighter.body.x;
+                    var yPos = gameState.activeFighter.body.y;
                     var width = 0;
                     if (gameState.activeFighter.animDir == "left") {
                         width = -gameState.activeFighter.attackRange;
+                        xPos += 40;
                     } else if (gameState.activeFighter.animDir == "right") {
                         width = gameState.activeFighter.attackRange;
+                        xPos -= 40;
                     }
                     var height = gameState.activeFighter.height;
                     
@@ -1323,8 +1331,8 @@
                     if (attackingTeam == 1) {
                         //Left team is attacking: loop through right team
                         teams.rightTeam.forEach(function(fighter) {
-                            var currentXPos = fighter.x + fighter.width / 2;
-                            var currentYPos = fighter.y + fighter.height / 2;
+                            var currentXPos = fighter.body.x + fighter.width / 2;
+                            var currentYPos = fighter.body.y + fighter.height / 2;
 
                             if (((currentXPos < xPos + width && currentXPos > xPos) || (currentXPos > xPos + width && currentXPos < xPos))
                                 && ((currentYPos < yPos + height && currentYPos > yPos) || (currentYPos > yPos + height && currentYPos < yPos))) {
@@ -1336,8 +1344,8 @@
                     } else if (attackingTeam == 2) {
                         //Right team is attacking: loop through left team
                         teams.leftTeam.forEach(function(fighter) {
-                            var currentXPos = fighter.x + fighter.width / 2;
-                            var currentYPos = fighter.y + fighter.height / 2;
+                            var currentXPos = fighter.body.x + fighter.width / 2;
+                            var currentYPos = fighter.body.y + fighter.height / 2;
 
                             if (((currentXPos < xPos + width && currentXPos > xPos) || (currentXPos > xPos + width && currentXPos < xPos))
                                 && ((currentYPos < yPos + height && currentYPos > yPos) || (currentYPos > yPos + height && currentYPos < yPos))) {
@@ -1346,6 +1354,8 @@
                             }
                         });
                     }
+                    
+                    playAnim(gameState.activeFighter, "attacking", false, "standing");
                 }
                 
                 function fighterHit(fighter, damage) {
