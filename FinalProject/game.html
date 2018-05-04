@@ -54,6 +54,10 @@
                     game.load.image('person', 'img/Person.png');
                     game.load.spritesheet('paladin', 'img/Paladin.png', 130, 130);
                     game.load.image('activeiconoverlay', 'img/ActiveIconOverlay.png');
+                    game.load.image('icon_swordstrike', 'img/Graybox.png');
+                    game.load.image('icon_observemode', 'img/Graybox.png');
+                    game.load.image('icon_nextturn', 'img/Graybox.png');
+                    game.load.image('icon_endgame', 'img/Graybox.png');
                     game.load.physics("physics", "json/Hitboxes.json");
                 }
 
@@ -1175,8 +1179,8 @@
                     var icon = null;
                     switch (newFighterType) {
                         case ("paladin"):
-                            actionMenu.numIcons = 4;
-                            icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
+                            actionMenu.numIcons = 1;
+                            icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "icon_swordstrike");
                             actionMenu.iconArr.push(icon);
                             icon.iconOffset = new Object();
                             icon.iconOffset.x = xOffset;
@@ -1186,35 +1190,14 @@
                             icon.fixedToCamera = true;
                             icon.relatedAction = "swordstrike";
                             
-                            xOffset += ICON_WIDTH;
-                            
-                            icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
-                            actionMenu.iconArr.push(icon);
-                            icon.iconOffset = new Object();
-                            icon.iconOffset.x = xOffset;
-                            icon.iconOffset.y = yOffset;
-                            icon.width = ICON_WIDTH;
-                            icon.height = ICON_WIDTH;
-                            icon.fixedToCamera = true;
-                            icon.relatedAction = "swordstrike";
-                            
-                            xOffset += ICON_WIDTH;
-                            
-                            icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
-                            actionMenu.iconArr.push(icon);
-                            icon.iconOffset = new Object();
-                            icon.iconOffset.x = xOffset;
-                            icon.iconOffset.y = yOffset;
-                            icon.width = ICON_WIDTH;
-                            icon.height = ICON_WIDTH;
-                            icon.fixedToCamera = true;
-                            icon.relatedAction = "swordstrike";
+                            //TEMP
+                            icon.tint = 0xFF5555;
                             
                             xOffset += ICON_WIDTH;
                             break;
                     }
                     actionMenu.numIcons++;
-                    icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
+                    icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "icon_observemode");
                     actionMenu.iconArr.push(icon);
                     icon.iconOffset = new Object();
                     icon.iconOffset.x = xOffset;
@@ -1224,10 +1207,13 @@
                     icon.fixedToCamera = true;
                     icon.relatedAction = "observemode";
                     
+                    //TEMP
+                    icon.tint = 0x55FF55;
+                    
                     xOffset += ICON_WIDTH;
                     
                     actionMenu.numIcons++;
-                    icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
+                    icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "icon_nextturn");
                     actionMenu.iconArr.push(icon);
                     icon.iconOffset = new Object();
                     icon.iconOffset.x = xOffset;
@@ -1237,10 +1223,13 @@
                     icon.fixedToCamera = true;
                     icon.relatedAction = "endturn";
                     
+                    //TEMP
+                    icon.tint = 0x5555FF;
+                    
                     xOffset += ICON_WIDTH;
                     
                     actionMenu.numIcons++;
-                    icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "graybox");
+                    icon = actionMenu.icons.create(actionMenu.xPos + xOffset, actionMenu.yPos + yOffset, "icon_endgame");
                     actionMenu.iconArr.push(icon);
                     icon.iconOffset = new Object();
                     icon.iconOffset.x = xOffset;
@@ -1249,6 +1238,9 @@
                     icon.height = ICON_WIDTH;
                     icon.fixedToCamera = true;
                     icon.relatedAction = "tomainmenu";
+                    
+                    //TEMP
+                    icon.tint = 0x555555;
                     
                     xOffset += ICON_WIDTH;
                     
