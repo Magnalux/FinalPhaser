@@ -16,6 +16,7 @@
                 var MAP_WIDTH = 4000;
                 var MAP_HEIGHT = 800;
                 var ICON_WIDTH = 100;
+                var BUTTON_WIDTH = 70;
                 var BAR_MAX_LENGTH = 256;
                 var BAR_HEIGHT = 15;
                 var ANIM_FRAME_RATE = 8;
@@ -163,31 +164,64 @@
                     game.camera.y = 0;
                     
                     selectMenu = new Object();
-                    selectMenu.testText = game.add.text(5, 5, "Click the gray square to start", { fill: "#ffffff", font: "14pt Arial" });
-                    selectMenu.testText.fixedToCamera = true;
-                    selectMenu.testText.cameraOffset.x = (game.width - selectMenu.testText.width) / 2;
+                    selectMenu.text = game.add.text(5, 5, "Click a button to start!\nRed: 1v1\tGreen: 2v2\tBlue: 3v3", { fill: "#ffffff", font: "14pt Arial" });
+                    selectMenu.text.fixedToCamera = true;
+                    selectMenu.text.cameraOffset.x = (game.width - selectMenu.text.width) / 2;
                     
-                    selectMenu.testButton = game.add.button(200, 150, "button", actionOnClick, this);
-                    selectMenu.testButton.fixedToCamera = true;
+                    selectMenu.onevone = game.add.button(200, 150, "button", startOneVOne, this);
+                    selectMenu.onevone.tint = 0xFF0000;
+                    selectMenu.onevone.width = BUTTON_WIDTH;
+                    selectMenu.onevone.height = BUTTON_WIDTH;
+                    selectMenu.onevone.fixedToCamera = true;
+                    
+                    selectMenu.twovtwo = game.add.button(400, 150, "button", startTwoVTwo, this);
+                    selectMenu.twovtwo.tint = 0x00FF00;
+                    selectMenu.twovtwo.width = BUTTON_WIDTH;
+                    selectMenu.twovtwo.height = BUTTON_WIDTH;
+                    selectMenu.twovtwo.fixedToCamera = true;
+                    
+                    selectMenu.thrvthr = game.add.button(600, 150, "button", startThrVThr, this);
+                    selectMenu.thrvthr.tint = 0x0000FF;
+                    selectMenu.thrvthr.width = BUTTON_WIDTH;
+                    selectMenu.thrvthr.height = BUTTON_WIDTH;
+                    selectMenu.thrvthr.fixedToCamera = true;
                 }
                 
                 function deleteSelectMenu() {
                     if (selectMenu != null) {
-                        if (selectMenu.testText != null) {
-                            selectMenu.testText.destroy();
+                        if (selectMenu.text != null) {
+                            selectMenu.text.destroy();
                         }
-                        if (selectMenu.testButton != null) {
-                            selectMenu.testButton.destroy();
+                        if (selectMenu.onevone != null) {
+                            selectMenu.onevone.destroy();
+                        }
+                        if (selectMenu.twovtwo != null) {
+                            selectMenu.twovtwo.destroy();
+                        }
+                        if (selectMenu.thrvthr != null) {
+                            selectMenu.thrvthr.destroy();
                         }
                         console.log(selectMenu);
                         //selectMenu.destroy();
                     }
                 }
                 
-                function actionOnClick() {
+                function startOneVOne() {
                     deleteSelectMenu();
                     
                     currentLevel = 0;
+                    loadLevel(currentLevel);
+                }
+                function startTwoVTwo() {
+                    deleteSelectMenu();
+                    
+                    currentLevel = 1;
+                    loadLevel(currentLevel);
+                }
+                function startThrVThr() {
+                    deleteSelectMenu();
+                    
+                    currentLevel = 2;
                     loadLevel(currentLevel);
                 }
                 
@@ -255,12 +289,28 @@
                         
                         //Load the fighters
                         //Make the first fighter be the one that is active first
-                        var firstFighter = spawnFighter(MAP_WIDTH/2 - 40, game.height - 120, "paladin", 1);
-                        var fighter = spawnFighter(MAP_WIDTH/2 + 200, game.height - 120, "paladin", 2);
-                        //fighter = spawnFighter(MAP_WIDTH/2 - 40, game.height - 160, "paladin", 1);
-                        //fighter = spawnFighter(MAP_WIDTH/2 + 200, game.height - 160, "paladin", 2);
-                        //fighter = spawnFighter(MAP_WIDTH/2 - 40, game.height - 200, "paladin", 1);
-                        //fighter = spawnFighter(MAP_WIDTH/2 + 200, game.height - 200, "paladin", 2);
+                        var firstFighter = spawnFighter(MAP_WIDTH/2 - 40, game.height - 80, "paladin", 1);
+                        var fighter = spawnFighter(MAP_WIDTH/2 + 200, game.height - 80, "paladin", 2);
+                        
+                        switchFighter(firstFighter);
+                        
+                    } else if (levelIdx == 1) {
+                        //Load Level 1
+                        var firstFighter = spawnFighter(MAP_WIDTH/2 - 40, game.height - 80, "paladin", 1);
+                        var fighter = spawnFighter(MAP_WIDTH/2 + 200, game.height - 80, "paladin", 2);
+                        fighter = spawnFighter(MAP_WIDTH/2 - 140, game.height - 80, "paladin", 1);
+                        fighter = spawnFighter(MAP_WIDTH/2 + 300, game.height - 80, "paladin", 2);
+                        
+                        switchFighter(firstFighter);
+                        
+                    } else if (levelIdx == 2) {
+                        //Load Level 2
+                        var firstFighter = spawnFighter(MAP_WIDTH/2 - 40, game.height - 80, "paladin", 1);
+                        var fighter = spawnFighter(MAP_WIDTH/2 + 200, game.height - 80, "paladin", 2);
+                        fighter = spawnFighter(MAP_WIDTH/2 - 140, game.height - 80, "paladin", 1);
+                        fighter = spawnFighter(MAP_WIDTH/2 + 300, game.height - 80, "paladin", 2);
+                        fighter = spawnFighter(MAP_WIDTH/2 - 240, game.height - 80, "paladin", 1);
+                        fighter = spawnFighter(MAP_WIDTH/2 + 400, game.height - 80, "paladin", 2);
                         
                         switchFighter(firstFighter);
                         
@@ -470,19 +520,15 @@
                     //Get the next y position of the GUI
                     var newYPos = actionMenu.yPos;
                     if (actionMenu.state == 1) {
-                        console.log("MOVING UP");
                         newYPos -= actionMenu.moveRate;
                     } else if (actionMenu.state == -1) {
-                        console.log("MOVING DOWN");
                         newYPos += actionMenu.moveRate;
                     }
                     //Check min/max boundaries
                     if (newYPos < actionMenu.minYPos) {
-                        console.log("HIT MAX HEIGHT");
                         newYPos = actionMenu.minYPos;
                         actionMenu.state = 0;
                     } else if (newYPos > actionMenu.maxYPos) {
-                        console.log("HIT MIN HEIGHT");
                         newYPos = actionMenu.maxYPos;
                         actionMenu.state = 0;
                     }
@@ -698,22 +744,18 @@
                 
                 function switchFighter(newFighter) {
                     if (gameState.activeFighter != null) {
-                        if (gameState.activeFighter.team != newFighter.team) {
-                            console.log("SWITCHING TEAMS");
-                            gameState.activeFighter.body.velocity.x = 0;
-                            gameState.activeFighter.body.velocity.y = 0;
-                            gameState.activeFighter.body.kinematic = true;
-                            gameState.activeFighter = null;
-                        } else {
+                        if (gameState.activeFighter.team == newFighter.team) {
                             console.log("DID NOT SWITCH TEAMS");
                             console.log(gameState.activeFighter.team);
                             console.log(newFighter.team);
-                            
-                            gameState.activeFighter.body.velocity.x = 0;
-                            gameState.activeFighter.body.velocity.y = 0;
-                            gameState.activeFighter.body.kinematic = true;
-                            gameState.activeFighter = null;
+                        } else {
+                            console.log("SWITCHING TEAMS");
                         }
+                        gameState.activeFighter.body.velocity.x = 0;
+                        gameState.activeFighter.body.velocity.y = 0;
+                        gameState.activeFighter.body.kinematic = true;
+                        gameState.activeFighter = null;
+                        
                     }
                     
                     var oldDir = newFighter.animDir;
@@ -730,15 +772,24 @@
                     if (fighter.team == 1) {
                         teams.leftTeam.remove(fighter);
                         teams.leftTeamArr.splice(teams.leftTeamArr.indexOf(fighter), 1);
+                        teams.leftTeam.nextFighter--;
+                        if (teams.leftTeam.nextFighter < 0) {
+                            teams.leftTeam.nextFighter = 0;
+                        }
                         teams.leftTeam.numFighters--;
                     } else if (fighter.team == 2) {
                         teams.rightTeam.remove(fighter);
                         teams.rightTeamArr.splice(teams.rightTeamArr.indexOf(fighter), 1);
+                        teams.rightTeam.nextFighter--;
+                        if (teams.rightTeam.nextFighter < 0) {
+                            teams.rightTeam.nextFighter = 0;
+                        }
                         teams.rightTeam.numFighters--;
                     }
-                    if (fighter == gameState.activeFighter) {
+                    if (gameState.activeFighter == fighter) {
                         gameState.activeFighter = null;
                     }
+                    fighter.animations.stop();
                     fighter.destroy();
                 }
                 
@@ -746,11 +797,13 @@
                     //Changes variables so the next fighter in line can take their turn
                     if (teams.leftTeam.numFighters == 0) {
                         console.log("********LEFT TEAM WINS***************************************************")
+                        inputManager.state = "move";
                         teams.rightTeam.nextFighter++;
                         teams.rightTeam.nextFighter = teams.rightTeam.nextFighter % teams.rightTeam.numFighters;
                         switchFighter(teams.rightTeamArr[teams.rightTeam.nextFighter]);
                     } else if (teams.rightTeam.numFighters == 0) {
                         console.log("**************************************************RIGHT TEAM WINS********")
+                        inputManager.state = "move";
                         teams.leftTeam.nextFighter++;
                         teams.leftTeam.nextFighter = teams.leftTeam.nextFighter % teams.leftTeam.numFighters;
                         switchFighter(teams.leftTeamArr[teams.leftTeam.nextFighter]);
@@ -769,6 +822,8 @@
                             switchFighter(teams.rightTeamArr[teams.rightTeam.nextFighter]);
                         }
                     }
+                    console.log(teams.leftTeam.numFighters);
+                    console.log(teams.rightTeam.numFighters);
                 }
                 
                 function spawnGrenade() {
@@ -888,7 +943,7 @@
                 
                 
                 function wDown() {
-                    console.log("W Down");
+                    //console.log("W Down");
                     
                     switch (inputManager.state) {
                         case ("move"):
@@ -907,7 +962,7 @@
                 }
                 
                 function wPressed() {
-                    console.log("W Pressed");
+                    //console.log("W Pressed");
                     
                     switch (inputManager.state) {
                         case ("move"):
@@ -926,7 +981,7 @@
                 }
                 
                 function aDown() {
-                    console.log("A Down");
+                    //console.log("A Down");
                     
                     switch (inputManager.state) {
                         case ("move"):
@@ -945,7 +1000,7 @@
                 }
                 
                 function aPressed() {
-                    console.log("A Pressed");
+                    //console.log("A Pressed");
                     
                     switch (inputManager.state) {
                         case ("move"):
@@ -964,7 +1019,7 @@
                 }
                 
                 function sDown() {
-                    console.log("S Down");
+                    //console.log("S Down");
                     
                     switch (inputManager.state) {
                         case ("move"):
@@ -983,7 +1038,7 @@
                 }
                 
                 function sPressed() {
-                    console.log("S Pressed");
+                    //console.log("S Pressed");
                     
                     switch (inputManager.state) {
                         case ("move"):
@@ -1002,7 +1057,7 @@
                 }
                 
                 function dDown() {
-                    console.log("D Down");
+                    //console.log("D Down");
                     
                     switch (inputManager.state) {
                         case ("move"):
@@ -1021,7 +1076,7 @@
                 }
                 
                 function dPressed() {
-                    console.log("D Pressed");
+                    //console.log("D Pressed");
                     
                     switch (inputManager.state) {
                         case ("move"):
@@ -1040,7 +1095,7 @@
                 }
                 
                 function spaceDown() {
-                    console.log("Space Down");
+                    //console.log("Space Down");
                     
                     switch (inputManager.state) {
                         case ("move"):
@@ -1059,7 +1114,7 @@
                 }
                 
                 function spacePressed() {
-                    console.log("Space Pressed");
+                    //console.log("Space Pressed");
                     
                     switch (inputManager.state) {
                         case ("move"):
@@ -1078,7 +1133,7 @@
                 }
                 
                 function fighterJump() {
-                    console.log("Fighter jumped");
+                    //console.log("Fighter jumped");
                     
                     if (gameState.activeFighter != null) {
                         if (gameState.activeFighter.numJumps > 0) {
@@ -1090,7 +1145,6 @@
                 }
                 
                 function fighterMoveLeft() {
-                    console.log("Fighter moved left");
                     
                     if (gameState.activeFighter != null) {
                         if (!gameState.activeFighter.outOfBounds) {    
@@ -1118,7 +1172,6 @@
                 }
                 
                 function fighterMoveRight() {
-                    console.log("Fighter moved right");
                     
                     if (gameState.activeFighter != null) {
                         if (!inputManager.movingLeft) {
@@ -1307,8 +1360,8 @@
                     //Determine the team that is attacking
                     var attackingTeam = gameState.activeFighter.team;
                     //Attacking Hitbox Points
-                    var xPos = gameState.activeFighter.body.x;
-                    var yPos = gameState.activeFighter.body.y;
+                    var xPos = gameState.activeFighter.x;
+                    var yPos = gameState.activeFighter.y;
                     var width = 0;
                     if (gameState.activeFighter.animDir == "left") {
                         width = -gameState.activeFighter.attackRange;
@@ -1323,8 +1376,8 @@
                     if (attackingTeam == 1) {
                         //Left team is attacking: loop through right team
                         teams.rightTeam.forEach(function(fighter) {
-                            var currentXPos = fighter.body.x + fighter.width / 2;
-                            var currentYPos = fighter.body.y + fighter.height / 2;
+                            var currentXPos = fighter.x + fighter.width / 2;
+                            var currentYPos = fighter.y + fighter.height / 2;
 
                             if (((currentXPos < xPos + width && currentXPos > xPos) || (currentXPos > xPos + width && currentXPos < xPos))
                                 && ((currentYPos < yPos + height && currentYPos > yPos) || (currentYPos > yPos + height && currentYPos < yPos))) {
@@ -1336,8 +1389,8 @@
                     } else if (attackingTeam == 2) {
                         //Right team is attacking: loop through left team
                         teams.leftTeam.forEach(function(fighter) {
-                            var currentXPos = fighter.body.x + fighter.width / 2;
-                            var currentYPos = fighter.body.y + fighter.height / 2;
+                            var currentXPos = fighter.x + fighter.width / 2;
+                            var currentYPos = fighter.y + fighter.height / 2;
 
                             if (((currentXPos < xPos + width && currentXPos > xPos) || (currentXPos > xPos + width && currentXPos < xPos))
                                 && ((currentYPos < yPos + height && currentYPos > yPos) || (currentYPos > yPos + height && currentYPos < yPos))) {
@@ -1356,7 +1409,7 @@
                     if (fighter.health <= 0) {
                         //Fighter dies
                         //Play death anim
-                        playAnim(fighter, "death", "knockeddown");
+                        //playAnim(fighter, "death", "knockeddown");
                         //At end of anim, kill fighter
                         killFighter(fighter);
                         console.log("FIGHTER KILLED");
