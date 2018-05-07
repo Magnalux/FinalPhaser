@@ -1,15 +1,11 @@
 Overview:
 This repository is for a simple turn-based fighting game between two teams. See the provided proposal for more details.
 
-The game is made in Phaser and uses the P2 physics engine. Hitboxes are created with the Loon Physics physics editor 
-tool (see https://loonride.com/tools/physics).
+The game is made in Phaser and uses the P2 physics engine. Hitboxes are created with the Loon Physics physics editor tool (see https://loonride.com/tools/physics).
 
-Currently, functionality is implemented only for the Paladin class's Sword Strike action. The attached proposal goes into 
-more detail on other classes such as Bow Master, Archmage, Spear Lord, and Ranger that could be added to this project in the future.
+Currently, functionality is implemented only for the Paladin class's Sword Strike action. The attached proposal goes into more detail on other classes such as Bow Master, Archmage, Spear Lord, and Ranger that could be added to this project in the future.
 
 The game supports animation, spritesheets, and loading in P2 hitbox data. Sound is not currently implemented.
 
 Getting Started:
-Make sure Brackets is installed on your computer. Opening the FinalProject folder as a Brackets Project will allow you to run the 
-program through the Brackets live preview. Running the HTML file directly is not possible without making your machine into a web server, 
-which is probably not preferred.
+Make sure Brackets is installed on your computer. Opening the FinalProject folder as a Brackets Project will allow you to run the program through the Brackets live preview. Running the HTML file directly is not possible without making your machine into a web server, which is probably not preferred.
